@@ -1,0 +1,609 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Code Guide</title>
+<style>
+:root{--bg:#fafaf7;--card:#fff;--ink:#1b1f24;--mut:#5f6977;--line:#d9dde3;--blue:#2563eb;--blueBg:#e8f0ff;--orange:#c2640a;--orBg:#fff1e0;--green:#15803d;--grBg:#e6f6ec;--code:#f1f3f6;--hot:#fff0a0}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#14171c;--card:#1c2128;--ink:#e6e9ee;--mut:#9aa4b2;--line:#333b46;--blue:#6ea1ff;--blueBg:#1d2a44;--orange:#f0a04b;--orBg:#3a2a15;--green:#5fd08a;--grBg:#15301f;--code:#232a33;--hot:#4a4310}}
+:root[data-theme="dark"]{--bg:#14171c;--card:#1c2128;--ink:#e6e9ee;--mut:#9aa4b2;--line:#333b46;--blue:#6ea1ff;--blueBg:#1d2a44;--orange:#f0a04b;--orBg:#3a2a15;--green:#5fd08a;--grBg:#15301f;--code:#232a33;--hot:#4a4310}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.layout{display:grid;grid-template-columns:260px 1fr;max-width:1240px;margin:0 auto}
+nav{position:sticky;top:0;align-self:start;height:100vh;overflow:auto;padding:18px 14px;border-right:1px solid var(--line)}
+nav h2{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--mut);margin:0 0 8px}
+nav a{display:block;text-decoration:none;color:var(--ink);font-size:14px;padding:5px 9px;border-radius:7px;margin:2px 0}
+nav a small{display:block;color:var(--mut);font-size:12px}
+nav a.act{background:var(--blueBg);color:var(--blue);font-weight:700}
+nav a:hover{background:var(--code)}
+main{padding:24px 24px 120px;min-width:0}
+h1{font-size:30px;margin:0 0 6px}
+h2.stage{font-size:23px;margin:56px 0 4px;padding-top:12px;border-top:1px solid var(--line)}
+.sn{display:inline-block;background:var(--blue);color:#fff;border-radius:99px;font-size:14px;padding:1px 11px;margin-right:8px;vertical-align:3px}
+.lead{color:var(--mut);font-size:17px}
+.intro{margin:6px 0 12px}
+.flow{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:10px 0 16px;font-size:13px}
+.flow a{border:1px solid var(--line);background:var(--card);border-radius:8px;padding:3px 10px;text-decoration:none;color:var(--ink);font-family:ui-monospace,Consolas,monospace;font-size:12.5px}
+.flow a:hover{border-color:var(--blue);background:var(--blueBg)}
+.flow i{color:var(--mut);font-style:normal}
+.file{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin:14px 0;scroll-margin-top:12px}
+.file:target{border-color:var(--blue);box-shadow:0 0 0 3px var(--blueBg)}
+.file header{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:8px}
+.path{font-family:ui-monospace,Consolas,Menlo,monospace;font-weight:700;font-size:15px}
+.lang{font-size:11px;font-weight:700;border-radius:99px;padding:1px 9px;border:1px solid var(--line);color:var(--mut)}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:900px){.layout{grid-template-columns:1fr}nav{position:static;height:auto;border-right:none;border-bottom:1px solid var(--line)}.grid{grid-template-columns:1fr}}
+.box{border-radius:9px;padding:8px 12px;font-size:15px}
+.box>b:first-child{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.06em;margin-bottom:2px}
+.what{background:var(--blueBg)}.what>b:first-child{color:var(--blue)}
+.why{background:var(--orBg)}.why>b:first-child{color:var(--orange)}
+.box p{margin:2px 0}
+.links{font-size:13.5px;color:var(--mut);margin:10px 0 4px}
+.links a{color:var(--blue);text-decoration:none;font-family:ui-monospace,Consolas,monospace;font-size:12.5px}
+details{margin-top:6px}
+summary{cursor:pointer;font-size:14px;color:var(--blue);font-weight:600}
+pre{margin:8px 0 0;background:var(--code);border-radius:8px;padding:10px 12px;overflow:auto;font:12.8px/1.5 ui-monospace,Consolas,Menlo,monospace}
+pre .c{color:var(--green)}
+ul.t{margin:4px 0;padding-left:20px}
+ul.t li{margin:2px 0}
+code{font-family:ui-monospace,Consolas,monospace;font-size:.9em;background:var(--code);padding:1px 5px;border-radius:4px}
+.tools{display:flex;gap:8px;margin:12px 0}
+.btn{font:inherit;font-size:14px;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:7px;padding:5px 12px;cursor:pointer}
+.btn:hover{border-color:var(--blue)}
+.tip{border-left:5px solid var(--green);background:var(--grBg);border-radius:8px;padding:8px 14px;margin:12px 0;font-size:15px}
+.big{border:1px solid var(--line);border-radius:12px;background:var(--card);padding:12px 14px}
+.big svg{max-width:100%;height:auto;display:block}
+.nodeb rect{fill:var(--card);stroke:var(--line);stroke-width:1.5}
+.nodeb text{fill:var(--ink);font-size:12.5px;text-anchor:middle}
+.nodeb .s{fill:var(--mut);font-size:10.5px}
+.nodeb.on rect{fill:var(--hot);stroke:var(--blue);stroke-width:2.5}
+.arr{stroke:var(--mut);stroke-width:1.8;fill:none}
+</style>
+</head>
+<body>
+<div class="layout">
+<nav id="nav">
+  <h2>Follow a job</h2>
+  <a href="#overview">Overview<small>the whole flow in one picture</small></a>
+  <a href="#s1">1 · Foundations<small>containers, tables, shared types</small></a>
+  <a href="#s2">2 · Submit a job<small>POST /jobs</small></a>
+  <a href="#s3">3 · Publish tasks<small>queue, fairness</small></a>
+  <a href="#s4">4 · Worker runs a task<small>generate files</small></a>
+  <a href="#s5">5 · Scheduler gets the result<small>one transaction</small></a>
+  <a href="#s6">6 · Planner and combine<small>when to merge, the maths</small></a>
+  <a href="#s7">7 · Finish and observe<small>status, download, dashboard</small></a>
+  <a href="#s8">8 · When things go wrong<small>dead, slow, retry, cancel</small></a>
+  <a href="#s9">9 · Scripts and tests</a>
+</nav>
+<main>
+
+<h1>Code guide, in the order a job flows</h1>
+<p class="lead">Every file in the project, with <b>what</b> it does and <b>why</b> it is written that way. Read top to bottom: the stages follow one job from the request to the finished file.</p>
+<div class="tools">
+  <button class="btn" id="openAll">Open all code</button>
+  <button class="btn" id="closeAll">Close all code</button>
+</div>
+
+<!-- ================= OVERVIEW ================= -->
+<h2 class="stage" id="overview">Overview</h2>
+<div class="big">
+<svg viewBox="0 0 900 250" role="img" aria-label="Flow of one job through the code">
+  <defs><marker id="ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--mut)"/></marker></defs>
+  <g class="nodeb" data-n="1"><rect x="10" y="20" width="130" height="62" rx="9"/><text x="75" y="44">1 Foundations</text><text class="s" x="75" y="62">tables, types, config</text></g>
+  <g class="nodeb" data-n="2"><rect x="170" y="20" width="130" height="62" rx="9"/><text x="235" y="44">2 Submit</text><text class="s" x="235" y="62">API creates the job</text></g>
+  <g class="nodeb" data-n="3"><rect x="330" y="20" width="130" height="62" rx="9"/><text x="395" y="44">3 Publish</text><text class="s" x="395" y="62">tasks go to the queue</text></g>
+  <g class="nodeb" data-n="4"><rect x="490" y="20" width="130" height="62" rx="9"/><text x="555" y="44">4 Worker</text><text class="s" x="555" y="62">does one task</text></g>
+  <g class="nodeb" data-n="5"><rect x="650" y="20" width="130" height="62" rx="9"/><text x="715" y="44">5 Scheduler</text><text class="s" x="715" y="62">records the result</text></g>
+  <g class="nodeb" data-n="6"><rect x="650" y="140" width="130" height="62" rx="9"/><text x="715" y="164">6 Planner</text><text class="s" x="715" y="182">combine now? maths</text></g>
+  <g class="nodeb" data-n="7"><rect x="170" y="140" width="130" height="62" rx="9"/><text x="235" y="164">7 Observe</text><text class="s" x="235" y="182">status, result, UI</text></g>
+  <g class="nodeb" data-n="8"><rect x="410" y="140" width="130" height="62" rx="9"/><text x="475" y="164">8 Safety nets</text><text class="s" x="475" y="182">dead, slow, retry</text></g>
+  <path class="arr" d="M140,51 L168,51" marker-end="url(#ah)"/>
+  <path class="arr" d="M300,51 L328,51" marker-end="url(#ah)"/>
+  <path class="arr" d="M460,51 L488,51" marker-end="url(#ah)"/>
+  <path class="arr" d="M620,51 L648,51" marker-end="url(#ah)"/>
+  <path class="arr" d="M715,82 L715,138" marker-end="url(#ah)"/>
+  <path class="arr" d="M650,171 C560,171 520,120 440,90 L400,86" marker-end="url(#ah)"/>
+  <text x="450" y="235" font-size="12" style="fill:var(--mut)" text-anchor="middle">Stages 3 → 4 → 5 → 6 repeat (the planner sends new combine tasks back to the queue) until one item covers all F files. Stage 8 watches over all of it.</text>
+</svg>
+</div>
+<div class="tip"><b>Three rules to keep in mind while reading.</b><br>
+1. Every result is <b>sums + a count</b>, never an average. Only the last task divides.<br>
+2. Messages and the database hold <b>paths and counts</b>. The numbers only live in files on the shared disk.<br>
+3. <b>Nothing is trusted to succeed.</b> Every step can be repeated safely, so crashes only cause a retry.</div>
+
+<h3 style="margin-top:20px">File map</h3>
+<p>Paths are under <code>services/api/src/</code> (TypeScript) and <code>services/worker/distributed_mean/</code> (Python) unless shown in full.</p>
+
+<!-- ================= STAGE 1 ================= -->
+<h2 class="stage" id="s1"><span class="sn">1</span>Foundations</h2>
+<p class="intro">Things every other file leans on. You do not need to memorize them. Skim now, come back when a later file mentions them.</p>
+<div class="flow"><a href="#f-compose">docker-compose.yml</a><i>→</i><a href="#f-schema">db/schema.sql</a><i>→</i><a href="#f-config">config</a><i>→</i><a href="#f-statuses">domain/statuses.ts</a><i>→</i><a href="#f-messages">domain/messages.ts</a><i>→</i><a href="#f-database">infrastructure/database.ts</a><i>→</i><a href="#f-broker">infrastructure/message-broker.ts</a></div>
+
+<article class="file" id="f-compose"><header><span class="path">docker-compose.yml</span><span class="lang">YAML</span></header>
+<div class="grid">
+<div class="box what"><b>What</b><p>Describes the five programs that make up the system: PostgreSQL, RabbitMQ, the API, the scheduler and the workers. Also their settings and the shared <code>./data</code> folder.</p></div>
+<div class="box why"><b>Why</b><p>One command (<code>docker compose up</code>) starts everything the same way on any machine. The API and scheduler use the <b>same code image</b> and differ only by the start command, so there is one codebase to build.</p></div>
+</div>
+<p class="links">Talks to: every service below.</p>
+<details><summary>Key code</summary><script type="text/plain" class="code">api:        command: node dist/entrypoints/api-server.js
+scheduler:  command: node dist/entrypoints/scheduler.js   # same image, other entry point
+workers:    command: python -m distributed_mean.worker_manager   # starts W worker processes
+            volumes: ./data:/data                         # all three share one folder
+            environment: WORKER_MEMORY_MB: "512"          # simulated small machine</script></details></article>
+
+<article class="file" id="f-dockerfiles"><header><span class="path">services/api/Dockerfile · services/worker/Dockerfile</span><span class="lang">Docker</span></header>
+<div class="grid">
+<div class="box what"><b>What</b><p>Build recipes. The API image installs packages, compiles TypeScript to JavaScript and copies the dashboard. The worker image installs Python packages.</p></div>
+<div class="box why"><b>Why</b><p>The worker image sets <code>OPENBLAS_NUM_THREADS=1</code> and <code>MALLOC_ARENA_MAX=1</code>. The 512 MB memory cap counts <i>virtual</i> memory, and extra threads and allocator pools would hit it even though little real memory is used.</p></div>
+</div></article>
+
+<article class="file" id="f-schema"><header><span class="path">db/schema.sql</span><span class="lang">SQL</span></header>
+<div class="grid">
+<div class="box what"><b>What</b><p>The database tables: <code>jobs</code> (one per request), <code>tasks</code> (units of work), <code>items</code> (data files: raw files and partial results), <code>workers</code> (heartbeats), <code>settings</code> (desired worker count) and <code>events</code> (activity log).</p></div>
+<div class="box why"><b>Why</b><p>The database is the single source of truth, so a restarted process can pick up where it stopped. <code>CHECK</code> constraints reject impossible statuses. <code>items.path</code> is <code>UNIQUE</code>, so a duplicate result cannot insert the same item twice. An index on pending tasks keeps scheduling fast.</p></div>
+</div>
+<p class="links">Used by: nearly every file in <code>services/</code> and <code>repositories/</code>.</p>
+<details><summary>Key code</summary><script type="text/plain" class="code">CREATE TABLE items (
+  job_id       UUID NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+  path         TEXT NOT NULL UNIQUE,              -- blocks duplicate results
+  count        INT  NOT NULL CHECK (count >= 1),  -- how many original files it represents
+  state        TEXT NOT NULL DEFAULT 'READY' CHECK (state IN ('READY','USED')),
+  produced_by  UUID REFERENCES tasks(id),
+  used_by      UUID REFERENCES tasks(id)
+);</script></details></article>
+
+<article class="file" id="f-config"><header><span class="path">config/index.ts</span><span class="lang">TS</span><span class="path" style="font-weight:400">· worker: config.py</span><span class="lang">PY</span></header>
+<div class="grid">
+<div class="box what"><b>What</b><p>Reads every setting from environment variables once and exports it as a typed object: database and queue URLs, the 5-input limit, tick interval, retry limit, heartbeat timeout, straggler factor.</p></div>
+<div class="box why"><b>Why</b><p>Settings live in one place with sensible defaults, so no file reads <code>process.env</code> on its own. Required values (database, queue) fail immediately at start-up with a clear message instead of failing later at random.</p></div>
+</div>
+<p class="links">Used by: <a href="#f-dispatcher">task-dispatcher</a>, <a href="#f-planner">combine-planner</a>, <a href="#f-result">result-handler</a>, <a href="#f-scheduler">scheduler</a>, workers.</p>
+<details><summary>Key code</summary><script type="text/plain" class="code">export const config = {
+  maxTaskInputs: numberFromEnv("MAX_FAN_IN", 5),            // the "5 files per worker" rule
+  maxTaskAttempts: numberFromEnv("MAX_ATTEMPTS", 3),
+  workerHeartbeatTimeoutMs: numberFromEnv("WORKER_DEAD_MS", 10_000),
+  backupFactor: numberFromEnv("BACKUP_FACTOR", 2),
+};</script></details></article>
+
+<article class="file" id="f-statuses"><header><span class="path">domain/statuses.ts</span><span class="lang">TS</span></header>
+<div class="grid">
+<div class="box what"><b>What</b><p>Named constants for every status string: job (<code>PENDING, RUNNING, COMPLETED, FAILED, CANCELLED</code>), task type and status, item state (<code>READY, USED</code>), worker status, result status.</p></div>
+<div class="box why"><b>Why</b><p>Typing <code>"COMPLETD"</code> by mistake would silently never match. With constants the compiler catches it. The values equal the ones in <code>schema.sql</code> and in the Python worker.</p></div>
+</div>
+<details><summary>Key code</summary><script type="text/plain" class="code">export const ItemState = {
+  Ready: "READY", // waiting, available for a combine task
+  Used:  "USED",  // already assigned to a combine task
+} as const;</script></details></article>
+
+<article class="file" id="f-messages"><header><span class="path">domain/messages.ts</span><span class="lang">TS</span><span class="path" style="font-weight:400">· domain/rows.ts</span></header>
+<div class="grid">
+<div class="box what"><b>What</b><p><code>TaskMessage</code> (scheduler to worker) and <code>TaskResultMessage</code> (worker to scheduler), plus the shape of database rows in <code>rows.ts</code>.</p></div>
+<div class="box why"><b>Why</b><p>This is the <b>contract</b> between the TypeScript side and the Python side. A task carries <code>fileIndexes</code> or <code>inputs: [{path, count}]</code>, and a result carries <code>outputs: [{path, count}]</code>. Never the numbers: messages stay tiny even when C is a million.</p></div>
+</div>
+<details><summary>Key code</summary><script type="text/plain" class="code">export interface ItemRef { path: string; count: number }   // a file on disk + files it covers
+
+export interface TaskMessage {
+  taskId: string; jobId: string; type: TaskType;
+  c: number;               // numbers per file
+  attempt: number;
+  isFinal: boolean;        // the last combine: divide by the count
+  isBackup: boolean;       // duplicate sent for a slow task
+  fileIndexes: number[];   // GENERATE only
+  inputs: CombineInput[];  // COMBINE only (at most 5)
+}</script></details></article>
+
+<article class="file" id="f-database"><header><span class="path">infrastructure/database.ts</span><span class="lang">TS</span><span class="path" style="font-weight:400">· sql-fragments.ts</span></header>
+<div class="grid">
+<div class="box what"><b>What</b><p>A connection pool plus <code>withTransaction(work)</code>: begin, run the work, commit, or roll back if it throws. <code>sql-fragments.ts</code> holds the one shared SQL condition "this worker's heartbeat is recent".</p></div>
+<div class="box why"><b>Why</b><p>Many steps must succeed or fail <b>together</b> (for example: mark task done, add items, plan the next task). One helper guarantees nothing is left half-done. A shared fragment avoids copying the heartbeat condition into four places.</p></div>
+</div>
+<p class="links">Used by: <a href="#f-result">result-handler</a>, <a href="#f-dispatcher">task-dispatcher</a>, <a href="#f-jobservice">job-service</a>, <a href="#f-scheduler">scheduler</a>.</p>
+<details><summary>Key code</summary><script type="text/plain" class="code">export async function withTransaction<T>(work: (client: PoolClient) => Promise<T>): Promise<T> {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const result = await work(client);
+    await client.query("COMMIT");
+    return result;
+  } catch (err) {
+    await client.query("ROLLBACK");   // nothing is saved if anything failed
+    throw err;
+  } finally { client.release(); }
+}</script></details></article>
+
+<article class="file" id="f-broker"><header><span class="path">infrastructure/message-broker.ts</span><span class="lang">TS</span></header>
+<div class="grid">
+<div class="box what"><b>What</b><p>Connects to RabbitMQ, declares the two queues (<code>tasks</code>, <code>results</code>) and offers <code>publish(queue, message)</code>.</p></div>
+<div class="box why"><b>Why</b><ul class="t"><li><b>Retry on connect:</b> RabbitMQ answers its health check slightly before it accepts connections.</li><li><b>Durable queue + persistent messages:</b> they survive a broker restart.</li><li><b>Confirm channel:</b> <code>publish</code> resolves only after the broker has stored the message, so "published" really means published.</li></ul></div>
+</div>
+<p class="links">Used by: <a href="#f-dispatcher">task-dispatcher</a>, <a href="#f-straggler">backup-copies</a>, <a href="#f-scheduler">scheduler</a>.</p>
+<details><summary>Key code</summary><script type="text/plain" class="code">const channel = await connection.createConfirmChannel();   // broker confirms every publish
+await channel.assertQueue(TASK_QUEUE,   { durable: true });
+await channel.assertQueue(RESULT_QUEUE, { durable: true });
+
+channel.sendToQueue(queue, Buffer.from(JSON.stringify(message)),
+  { persistent: true }, (err) => (err ? reject(err) : resolve()));</script></details></article>
+
+<!-- ================= STAGE 2 ================= -->
+<h2 class="stage" id="s2"><span class="sn">2</span>Submit a job</h2>
+<p class="intro">A user calls <code>POST /jobs {"F":12,"C":3}</code>. The API checks the request, stores the job, cuts it into small GENERATE tasks, and answers right away. It does not wait for the work.</p>
+<div class="flow"><a href="#f-server">entrypoints/api-server.ts</a><i>→</i><a href="#f-jobsroutes">http/jobs-routes.ts</a><i>→</i><a href="#f-validation">http/validation.ts</a><i>→</i><a href="#f-jobservice">services/job-service.ts</a><i>→</i><a href="#f-eventlog">repositories/event-repository.ts</a></div>
+
+<article class="file" id="f-server"><header><span class="path">entrypoints/api-server.ts</span><span class="lang">TS</span></header>
+<div class="grid">
+<div class="box what"><b>What</b><p>Starts the Express web server, registers the routes, serves the dashboard and has one last error handler.</p></div>
+<div class="box why"><b>Why</b><p>It is only wiring: no logic. The error handler logs the real error but returns a generic <code>500</code>, so internal details never leak to users.</p></div>
+</div>
+<p class="links">Calls: <a href="#f-jobsroutes">jobs-routes</a>, <a href="#f-statsroutes">stats-routes</a>, <a href="#f-workersroutes">workers-routes</a>.</p></article>
+
+<article class="file" id="f-validation"><header><span class="path">http/validation.ts</span><span class="lang">TS</span><span class="path" style="font-weight:400">· http/async-handler.ts</span></header>
+<div class="grid">
+<div class="box what"><b>What</b><p><code>validateJobSize</code> checks <code>1 &lt; F &lt; 100000</code> and <code>1 &lt; C &lt; 1000000</code>. <code>isUuid</code> checks ids. <code>asyncHandler</code> forwards errors from async routes to the error handler.</p></div>
+<div class="box why"><b>Why</b><p>Reject bad input with a clear <code>400</code> before anything is stored. Express 4 does not catch rejected promises, so without <code>asyncHandler</code> a database error would hang the request.</p></div>
+</div></article>
+
+<article class="file" id="f-jobsroutes"><header><span class="path">http/jobs-routes.ts</span><span class="lang">TS</span></header>
+<div class="grid">
+<div class="box what"><b>What</b><p>The job endpoints: <code>POST /jobs</code>, <code>GET /jobs</code>, <code>GET /jobs/:id</code>, <code>GET /jobs/:id/result</code>, <code>DELETE /jobs/:id</code>. Each handler validates, calls one function, and sends the reply.</p></div>
+<div class="box why"><b>Why</b><p>Routes are thin on purpose: HTTP in, one service call, HTTP out. <code>POST</code> returns <code>202 Accepted</code> because the job is only <i>accepted</i>, not finished.</p></div>
+</div>
+<p class="links">Calls: <a href="#f-validation">validation</a>, <a href="#f-jobservice">job-service</a>, <a href="#f-jobrepo">job-repository</a>.</p>
+<details><summary>Key code</summary><script type="text/plain" class="code">jobsRouter.post("/jobs", asyncHandler(async (req, res) => {
+  const { F: fileCount, C: numbersPerFile } = req.body ?? {};
+  const validationError = validateJobSize(fileCount, numbersPerFile);
+  if (validationError) return res.status(400).json({ error: validationError });
+  const jobId = await createJob(fileCount, numbersPerFile);
+  res.status(202).json({ jobId });   // accepted: the work happens in the background
+}));</script></details></article>
+
+<article class="file" id="f-jobservice"><header><span class="path">services/job-service.ts</span><span class="lang">TS</span></header>
+<div class="grid">
+<div class="box what"><b>What</b><p><code>createJob</code>: inserts the job and, in the same transaction, one GENERATE task per group of 5 files (F = 12 gives tasks for files 0–4, 5–9, 10–11), then calls the dispatcher. <code>cancelJob</code>: marks a job CANCELLED and drops its unpublished tasks.</p></div>
+<div class="box why"><b>Why</b><p>Job and tasks are saved in <b>one transaction</b>, so a job never exists without its tasks. Chunks of 5 respect the per-worker limit from the very first step. Splitting is done in SQL (<code>generate_series</code>) so even F = 99,999 is one fast statement.</p></div>
+</div>
+<p class="links">Called by: <a href="#f-jobsroutes">jobs-routes</a>. Calls: <a href="#f-dispatcher">publishPendingTasks</a>, <a href="#f-eventlog">recordEvent</a>.</p>
+<details><summary>Key code</summary><script type="text/plain" class="code">// one GENERATE task per chunk of 5 files, built inside PostgreSQL
+INSERT INTO tasks (job_id, type, payload)
+SELECT $1, 'GENERATE',
+       jsonb_build_object('fileIndexes',
+         (SELECT jsonb_agg(i) FROM generate_series(chunk*$3, LEAST(chunk*$3+$3-1, $2-1)) AS i))
+FROM generate_series(0, ceil($2::numeric / $3)::int - 1) AS chunk</script></details></article>
+
+<article class="file" id="f-eventlog"><header><span class="path">repositories/event-repository.ts</span><span class="lang">TS</span></header>
+<div class="grid">
+<div class="box what"><b>What</b><p><code>recordEvent(jobId, message)</code> adds a line to the <code>events</code> table.</p></div>
+<div class="box why"><b>Why</b><p>This feeds the dashboard's live activity log. It accepts the current transaction as a parameter, so a log line is saved or rolled back together with the change it describes.</p></div>
+</div></article>
+
+<!-- ================= STAGE 3 ================= -->
+<h2 class="stage" id="s3"><span class="sn">3</span>Publish tasks to the queue</h2>
+<p class="intro">Tasks now sit in the database as <code>PENDING</code>. The dispatcher moves some of them into the RabbitMQ queue. It does not push everything, only a few at a time.</p>
+<div class="flow"><a href="#f-fleet">services/fleet-state.ts</a><i>→</i><a href="#f-dispatcher">services/task-dispatcher.ts</a><i>→</i><a href="#f-broker">infrastructure/message-broker.ts</a></div>
+
+<article class="file" id="f-fleet"><header><span class="path">services/fleet-state.ts</span><span class="lang">TS</span></header>
+<div class="grid">
+<div class="box what"><b>What</b><p><code>getFleetSnapshot()</code> returns four numbers: desired workers, idle workers, busy workers, and tasks waiting in the queue (queued minus busy).</p></div>
+<div class="box why"><b>Why</b><p>Both the dispatcher ("how many more tasks should I publish?") and the planner ("is a worker idle?") need the same picture of the fleet. Only workers with a recent heartbeat count, so dead ones never look available.</p></div>
+</div>
+<p class="links">Used by: <a href="#f-dispatcher">task-dispatcher</a>, <a href="#f-result">result-handler</a>, <a href="#f-scheduler">scheduler</a>.</p></article>
+
+<article class="file" id="f-dispatcher"><header><span class="path">services/task-dispatcher.ts</span><span class="lang">TS</span></header>
+<div class="grid">
+<div class="box what"><b>What</b><p><code>publishPendingTasks()</code> publishes <code>PENDING</code> tasks until the queue holds about <code>2 × workers</code> tasks, one task per job in turn (round-robin). <code>buildTaskMessage</code> turns a task row into the message a worker receives.</p></div>
+<div class="box why"><b>Why</b><ul class="t"><li><b>Shallow queue:</b> a huge job cannot fill the queue and starve a small job that arrives later.</li><li><b>Round-robin:</b> the 1st task of every job, then the 2nd of every job.</li><li><b>Publish first, then mark QUEUED:</b> a crash in between only republishes, which is harmless.</li><li><b>One run at a time:</b> overlapping calls would double-fill the same slots.</li></ul></div>
+</div>
+<p class="links">Called by: <a href="#f-jobservice">job-service</a>, <a href="#f-scheduler">scheduler</a> (after every result and every tick).</p>
+<details><summary>Key code</summary><script type="text/plain" class="code">// keep about two tasks per worker waiting: busy workers, but a fair, shallow queue
+const targetQueueDepth = Math.max(2, 2 * fleet.desiredWorkers);
+const freeSlots = targetQueueDepth - fleet.tasksWaitingInQueue;
+
+// 1st pending task of every job, then the 2nd of every job, ...
+SELECT ... ROW_NUMBER() OVER (PARTITION BY t.job_id ORDER BY t.created_at) AS rank_in_job
+...  ORDER BY rank_in_job, job_created LIMIT $1  FOR UPDATE OF t SKIP LOCKED
+
+await publish(TASK_QUEUE, buildTaskMessage(task, attempt));   // confirmed by the broker
+await client.query("UPDATE tasks SET status = 'QUEUED', attempts = $2 ...");</script></details></article>
+
+<!-- ================= STAGE 4 ================= -->
+<h2 class="stage" id="s4"><span class="sn">4</span>A worker runs a task</h2>
+<p class="intro">The worker side is Python. A manager keeps the right number of worker processes alive. Each worker takes one task, runs it, saves files, and reports back. First task type: <b>GENERATE</b>.</p>
+<div class="flow"><a href="#f-manager">worker_manager.py</a><i>→</i><a href="#f-worker">worker.py</a><i>→</i><a href="#f-computation">computation.py</a><i>→</i><a href="#f-storage">file_storage.py</a></div>
+
+<article class="file" id="f-manager"><header><span class="path">worker_manager.py</span><span class="lang">PY</span></header>
+<div class="grid">
+<div class="box what"><b>What</b><p>Every 2 seconds it reads <code>desired_workers</code> from the database, starts missing worker processes and tells surplus ones to stop (SIGTERM).</p></div>
+<div class="box why"><b>Why</b><ul class="t"><li><b>Separate processes</b> run truly in parallel, and one crashing does not take the others down. The manager restarts it.</li><li>The count is a <b>database setting</b>, so <code>PUT /workers</code> or the dashboard can scale up or down without restarting anything.</li><li>Scale-down uses SIGTERM, so a worker finishes its current task first (a graceful drain).</li></ul></div>
+</div>
+<p class="links">Starts: <a href="#f-worker">worker.py</a>.</p>
+<details><summary>Key code</summary><script type="text/plain" class="code">while not stopping:
+    desired = _read_desired_count(db)
+    for index in [i for i, p in processes.items() if not p.is_alive()]:
+        del processes[index]                       # crashed: restarted below
+    while len(processes) < desired:                # scale up
+        ...multiprocessing.Process(target=run_worker, args=(index, slowdown)).start()
+    for index in sorted(processes, reverse=True)[:surplus]:
+        processes[index].terminate()               # scale down: SIGTERM = finish task, then exit</script></details></article>
+
+<article class="file" id="f-worker"><header><span class="path">worker.py</span><span class="lang">PY</span></header>
+<div class="grid">
+<div class="box what"><b>What</b><p>One worker process. It connects, registers itself in the <code>workers</code> table, starts a heartbeat thread, then loops: take a task, run it, publish the result, acknowledge it.</p></div>
+<div class="box why"><b>Why</b><ul class="t"><li><b>prefetch = 1:</b> the broker gives a worker the next task only when it finishes the last, so faster workers do more automatically.</li><li><b>Ack after publishing the result:</b> if the worker dies earlier, the broker redelivers the task to someone else.</li><li><b>Heartbeat thread:</b> "no heartbeat for 10 s" is how the scheduler spots a dead worker.</li><li><b>SIGTERM blocked during a task:</b> a signal in the middle of a file write could leave a broken file.</li><li><b>Errors become FAILED results,</b> not crashes. The scheduler decides about a retry.</li><li><b>Re-checks the 5-input limit</b> even though the scheduler already enforces it (defence in depth).</li></ul></div>
+</div>
+<p class="links">Calls: <a href="#f-computation">computation</a>. Reports to: <a href="#f-scheduler">scheduler</a> through the results queue.</p>
+<details><summary>Key code</summary><script type="text/plain" class="code">def _process_message(self, method, task):
+    signal.pthread_sigmask(signal.SIG_BLOCK, {signal.SIGTERM})   # hold SIGTERM during the task
+    ...mark BUSY...
+    status, outputs, error = self._execute(task, started_at)
+    self._publish_result(task, status, outputs, started_at, error)
+    self.channel.basic_ack(method.delivery_tag)                  # only after the result is published
+    signal.pthread_sigmask(signal.SIG_UNBLOCK, {signal.SIGTERM}) # a waiting SIGTERM now sets `draining`
+    self._mark_idle()
+
+def _execute(self, task, started_at):
+    job = ...SELECT status FROM jobs...
+    if job is None or job[0] in ("CANCELLED", "FAILED"):
+        return SKIPPED, [], None                 # nobody needs this work any more
+    try:
+        outputs = generate_files(...) if task["type"] == "GENERATE" else combine_items(...)
+    except Exception as error:
+        return FAILED, [], str(error)            # report, do not crash</script></details></article>
+
+<article class="file" id="f-computation"><header><span class="path">computation.py</span><span class="lang">PY</span><span class="path" style="font-weight:400">· first half: generate_files</span></header>
+<div class="grid">
+<div class="box what"><b>What</b><p><code>generate_files</code> creates up to 5 files of C random numbers, saves each as <code>raw/00000.npy</code> and returns one item <code>{path, count: 1}</code> per file.</p></div>
+<div class="box why"><b>Why</b><p>A raw file is already a valid item (sums = itself, count = 1), so the same combine code handles files and partial results. The seed is derived from job id and file index, so a retried or duplicated task writes <b>identical</b> data, and <code>verify.py</code> can recompute the truth later.</p></div>
+</div>
+<p class="links">Writes via: <a href="#f-storage">storage</a>.</p>
+<details><summary>Key code</summary><script type="text/plain" class="code">def file_seed(job_id, file_index):                 # same job + index -> same numbers
+    digest = hashlib.sha256(f"{job_id}:{file_index}".encode()).digest()
+    return int.from_bytes(digest[:8], "little")
+
+for file_index in file_indexes:
+    generator = np.random.default_rng(file_seed(job_id, file_index))
+    values = generator.random(numbers_per_file, dtype=np.float32)
+    path = f"{job_id}/raw/{file_index:05d}.npy"
+    file_storage.save_array_atomic(data_dir, path, values)
+    items.append({"path": path, "count": 1})</script></details></article>
+
+<article class="file" id="f-storage"><header><span class="path">file_storage.py</span><span class="lang">PY</span></header>
+<div class="grid">
+<div class="box what"><b>What</b><p>Three helpers: save a NumPy array, save a CSV, load an array.</p></div>
+<div class="box why"><b>Why</b><ul class="t"><li><b>Atomic write:</b> write to a temporary file, then rename. A crash or a duplicate task never leaves a half-written file at the real path.</li><li><b>Memory-mapped load:</b> reading does not copy the whole array into RAM.</li><li><b>Length check:</b> a file of the wrong length would silently shift positions, so it raises an error instead.</li></ul></div>
+</div>
+<details><summary>Key code</summary><script type="text/plain" class="code">temp_path = f"{path}.tmp-{os.getpid()}"
+with open(temp_path, "wb") as handle:
+    np.save(handle, array)
+os.replace(temp_path, path)                        # atomic rename
+
+array = np.load(path, mmap_mode="r")               # not fully loaded into memory
+if array.shape != (expected_length,):
+    raise ValueError("expected shape ...")         # position = array index must hold</script></details></article>
+
+<!-- ================= STAGE 5 ================= -->
+<h2 class="stage" id="s5"><span class="sn">5</span>The scheduler receives the result</h2>
+<p class="intro">The worker's message arrives on the results queue. The scheduler is the only part that changes job state. It handles results one at a time, each in a single database transaction.</p>
+<div class="flow"><a href="#f-scheduler">entrypoints/scheduler.ts</a><i>→</i><a href="#f-result">services/result-handler.ts</a><i>→</i><a href="#f-planner">services/combine-planner.ts</a></div>
+
+<article class="file" id="f-scheduler"><header><span class="path">entrypoints/scheduler.ts</span><span class="lang">TS</span></header>
+<div class="grid">
+<div class="box what"><b>What</b><p>Process 2. It does two jobs: <b>(a)</b> consume result messages one at a time; <b>(b)</b> every 500 ms run a <b>tick</b> (dead-worker check, re-plan, backups, publish pending tasks).</p></div>
+<div class="box why"><b>Why</b><ul class="t"><li><b>Ack only after the transaction commits.</b> If it crashes in between, the message is redelivered. Because handling is idempotent, nothing breaks.</li><li><b>Failed handling is nacked</b> back to the queue after a 1 s pause, avoiding a tight loop.</li><li><b>Strict order, one at a time:</b> no two results for the same job race each other.</li><li><b>The tick</b> exists because some decisions depend on <i>time</i> or on a worker becoming idle, not on a new result.</li><li><b>Single instance</b> keeps the planning logic simple.</li></ul></div>
+</div>
+<p class="links">Calls: <a href="#f-result">applyWorkerResult</a>, <a href="#f-dispatcher">publishPendingTasks</a>, <a href="#f-planner">planCombineTasks</a>, <a href="#f-health">markDeadWorkers</a>, <a href="#f-straggler">publishBackupCopies</a>.</p>
+<details><summary>Key code</summary><script type="text/plain" class="code">previous = previous.then(async () => {            // strictly one result at a time
+  try {
+    await applyWorkerResult(JSON.parse(raw.content.toString()));
+    channel.ack(raw);                              // ack only after the DB transaction committed
+    await publishPendingTasks();                   // a slot may have freed up
+  } catch (err) {
+    channel.nack(raw, false, true);                // put it back, it will be redelivered
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+});
+
+async function tick() {
+  await markDeadWorkers();
+  ...re-plan RUNNING jobs that have >= 2 READY items...
+  await publishBackupCopies(fleet);
+  await publishPendingTasks();
+}</script></details></article>
+
+<article class="file" id="f-result"><header><span class="path">services/result-handler.ts</span><span class="lang">TS</span></header>
+<div class="grid">
+<div class="box what"><b>What</b><p><code>applyWorkerResult</code> turns a worker's report into database changes: lock the task and job; ignore it if the task is already DONE or the job is cancelled; on failure retry or fail the job; on success mark the task DONE, add the new items to the waiting items (READY), complete the job if it was the final task, then ask the planner for new work.</p></div>
+<div class="box why"><b>Why</b><ul class="t"><li><b>One transaction:</b> everything above succeeds or nothing does.</li><li><b>Idempotent:</b> a duplicate result (backup copy, redelivery) is ignored, and <code>ON CONFLICT DO NOTHING</code> on <code>items.path</code> blocks double inserts.</li><li><b>Row locks (FOR UPDATE)</b> make concurrent updates to the same job wait.</li><li><b>Count check:</b> the final task's count must equal F, otherwise the job is FAILED rather than returning a wrong mean.</li><li><b>Retry limit (3):</b> a task that keeps failing fails the job instead of looping forever.</li></ul></div>
+</div>
+<p class="links">Called by: <a href="#f-scheduler">scheduler</a>. Calls: <a href="#f-planner">planCombineTasks</a>, <a href="#f-fleet">getFleetSnapshot</a>.</p>
+<details><summary>Key code</summary><script type="text/plain" class="code">if (task.status === TaskStatus.Done) {            // duplicate: ignore
+  await recordEvent(task.job_id, "duplicate result ... ignored", client);
+  return;
+}
+...
+if (task.type === TaskType.Generate) {
+  await addGeneratedItems(client, job, task, msg);   // each raw file becomes a READY item, count 1
+} else if (task.is_final) {
+  await completeJob(client, job, msg);                // count must equal F, else FAILED
+} else {
+  await addItem(client, job.id, task.id, msg.outputs[0]);   // a partial goes back to the waiting items
+}
+if (job.status === JobStatus.Running) {
+  await planCombineTasks(client, job, await getFleetSnapshot(client));   // new items -> new work?
+}</script></details></article>
+
+<!-- ================= STAGE 6 ================= -->
+<h2 class="stage" id="s6"><span class="sn">6</span>Planner and combine: the heart</h2>
+<p class="intro">New items join the waiting items. The planner decides whether to create a COMBINE task now. A worker then runs it with <code>combine_items</code>, and the new partial goes back to the waiting items. This repeats until one item covers all F files.</p>
+<div class="flow"><a href="#f-planner">services/combine-planner.ts</a><i>→</i><a href="#f-dispatcher">task-dispatcher</a><i>→</i><a href="#f-worker">worker.py</a><i>→</i><a href="#f-combine">computation.py (combine)</a><i>→</i><a href="#f-result">result-handler</a></div>
+
+<article class="file" id="f-planner"><header><span class="path">services/combine-planner.ts</span><span class="lang">TS</span></header>
+<div class="grid">
+<div class="box what"><b>What</b><p><code>planCombineTasks</code> looks at one job's READY items and creates COMBINE tasks by four rules:<br>
+<b>1</b> 5 or more items are waiting: combine 5 now.<br>
+<b>2</b> all files generated and nothing else running: combine everything left as the <b>final</b> task.<br>
+<b>3</b> a worker is idle and the queue is empty: combine what is there (at least 2).<br>
+<b>4</b> one item left and all done: a final task that only divides.<br>Otherwise: wait.</p></div>
+<div class="box why"><b>Why</b><ul class="t"><li><b>No waiting for rounds:</b> combining starts while other files are still being generated, so workers stay busy.</li><li><b>Items become USED immediately</b> when the task is created, so no other task can take them.</li><li><b>Partials and raw files mix freely</b> because every item carries its own count.</li><li><b>Rule 3</b> avoids an idle worker. <b>Rule 2</b> is the only place a task becomes final, and it requires nothing else to be in flight.</li><li>Never more than 5 inputs per task.</li></ul></div>
+</div>
+<p class="links">Called by: <a href="#f-result">result-handler</a> (after each result), <a href="#f-scheduler">scheduler tick</a>.</p>
+<details><summary>Key code</summary><script type="text/plain" class="code">for (;;) {
+  if (waiting items.length >= maxInputs) {                       // rule 1: full waiting items
+    const inputs = waiting items.splice(0, maxInputs);
+    const isFinal = waiting items.length === 0 && unfinishedTasks === 0 && allFilesGenerated;
+    await createCombineTask(inputs, isFinal);
+    continue;
+  }
+  if (waiting items.length >= 2 && unfinishedTasks === 0 && allFilesGenerated) {   // rule 2: last combine
+    await createCombineTask(waiting items.splice(0), true); break;
+  }
+  if (waiting items.length >= 2 && idleWorkerAvailable) {        // rule 3: do not waste an idle worker
+    await createCombineTask(waiting items.splice(0), false); idleWorkerAvailable = false; break;
+  }
+  if (waiting items.length === 1 && unfinishedTasks === 0 && allFilesGenerated) {  // rule 4: only divide
+    await createCombineTask(waiting items.splice(0), true); break;
+  }
+  break;                                                  // otherwise wait
+}</script></details></article>
+
+<article class="file" id="f-combine"><header><span class="path">computation.py</span><span class="lang">PY</span><span class="path" style="font-weight:400">· second half: combine_items</span></header>
+<div class="grid">
+<div class="box what"><b>What</b><p>Adds up to 5 items position by position and adds their counts. Not final: saves the running sums as a new partial. Final: divides by the total count once and writes <code>result.npy</code> and <code>result.csv</code>.</p></div>
+<div class="box why"><b>Why</b><ul class="t"><li><b>Sums and counts, not averages:</b> groups have uneven sizes, and only sums can be merged in any order.</li><li><b>One input in memory at a time</b> plus the running total: this is how the 5-file RAM limit is respected.</li><li><b>float64 total</b> keeps precision when many values are added.</li><li><b>Divide only in the final task,</b> and report the total count so the scheduler can check it equals F.</li></ul></div>
+</div>
+<details><summary>Key code</summary><script type="text/plain" class="code">total = np.zeros(numbers_per_file, dtype=np.float64)
+total_count = 0
+for item in inputs:                                       # one input at a time
+    total += file_storage.load_array(data_dir, item["path"], numbers_per_file)   # position i + position i
+    total_count += item["count"]
+
+if is_final:
+    mean = total / total_count                             # the only division
+    ...write result.npy and result.csv...
+    return [{"path": f"{job_id}/result.csv", "count": total_count}]
+path = f"{job_id}/partials/{task_id}.npy"
+file_storage.save_array_atomic(data_dir, path, total)           # still sums, not divided
+return [{"path": path, "count": total_count}]</script></details></article>
+
+<!-- ================= STAGE 7 ================= -->
+<h2 class="stage" id="s7"><span class="sn">7</span>Finish and observe</h2>
+<p class="intro">When the final task's count equals F the job is COMPLETED. The rest of the code lets people see what is happening and fetch the answer.</p>
+<div class="flow"><a href="#f-jobsroutes2">jobs-routes (GET)</a><i>→</i><a href="#f-jobrepo">job-repository.ts</a><i>→</i><a href="#f-statsroutes">stats / workers routes</a><i>→</i><a href="#f-dashboard">public/index.html</a><i>→</i><a href="#f-verify">verify.py</a></div>
+
+<article class="file" id="f-jobsroutes2"><header><span class="path">http/jobs-routes.ts</span><span class="lang">TS</span><span class="path" style="font-weight:400">· GET /jobs/:id and /result</span></header>
+<div class="grid">
+<div class="box what"><b>What</b><p><code>GET /jobs/:id</code> returns status, progress and task counts. <code>GET /jobs/:id/result</code> downloads the CSV if COMPLETED, otherwise <code>409</code>.</p></div>
+<div class="box why"><b>Why</b><p>The client polls instead of waiting on an open connection, so jobs can take minutes. <code>409</code> tells a client "not ready yet" without being an error.</p></div>
+</div></article>
+
+<article class="file" id="f-jobrepo"><header><span class="path">repositories/job-repository.ts</span><span class="lang">TS</span></header>
+<div class="grid">
+<div class="box what"><b>What</b><p>Read queries for jobs: list, one job with task counts, and the result path. Also the <b>progress</b> formula.</p></div>
+<div class="box why"><b>Why</b><p>Keeping SQL in repositories keeps routes readable. Progress = (files generated + merges done) / (2F − 1): F generations plus F−1 merges. It is capped at 99 until COMPLETED, so it never shows 100 while work remains.</p></div>
+</div></article>
+
+<article class="file" id="f-statsroutes"><header><span class="path">http/stats-routes.ts · http/workers-routes.ts</span><span class="lang">TS</span><span class="path" style="font-weight:400">· repositories/stats-repository.ts · worker-repository.ts</span></header>
+<div class="grid">
+<div class="box what"><b>What</b><p><code>GET /stats</code>: counts of workers, jobs and tasks plus retries and backups. <code>GET /events</code>: the activity log. <code>GET /workers</code>: the worker table. <code>PUT /workers {count}</code>: set the worker count (0 to 32).</p></div>
+<div class="box why"><b>Why</b><p>These power the dashboard and make the system observable. A worker whose heartbeat is stale is reported as DEAD even if its stored status says BUSY. <code>/events?after=ID</code> lets the UI fetch only new lines.</p></div>
+</div>
+<p class="links">Reads the tables from <a href="#f-schema">schema.sql</a>. <code>PUT /workers</code> only writes a setting; <a href="#f-manager">worker_manager.py</a> reacts to it.</p></article>
+
+<article class="file" id="f-dashboard"><header><span class="path">services/api/public/index.html</span><span class="lang">HTML/JS</span></header>
+<div class="grid">
+<div class="box what"><b>What</b><p>A single-page dashboard with no build step. Every second it calls <code>/stats</code>, <code>/workers</code>, <code>/jobs</code> and <code>/events</code> and redraws counters, tables and the log. It has a form to create jobs, a worker-count control and cancel/download buttons.</p></div>
+<div class="box why"><b>Why</b><p>Plain polling is simple and robust. The UI contains no business logic: it only calls the same public API as any other client.</p></div>
+</div></article>
+
+<article class="file" id="f-verify"><header><span class="path">verify.py</span><span class="lang">PY</span></header>
+<div class="grid">
+<div class="box what"><b>What</b><p>Recomputes the mean directly from the raw files (adding them one by one) and compares it with <code>result.npy</code>. Passes if the largest difference is at most 1e-9.</p></div>
+<div class="box why"><b>Why</b><p>An independent check that the distributed pipeline produced the right answer. It does not use partials, so a bug in the combining logic cannot hide.</p></div>
+</div>
+<details><summary>Run it</summary><script type="text/plain" class="code">docker compose exec workers python -m distributed_mean.verify <jobId></script></details></article>
+
+<!-- ================= STAGE 8 ================= -->
+<h2 class="stage" id="s8"><span class="sn">8</span>When things go wrong</h2>
+<p class="intro">None of these needs special operator action. They are handled by the same flow, with a few small extra items.</p>
+<div class="flow"><a href="#f-health">worker-health.ts</a><i>·</i><a href="#f-straggler">backup-copies.ts</a><i>·</i><a href="#f-retry">retries</a><i>·</i><a href="#f-cancel">cancel</a></div>
+
+<article class="file" id="f-health"><header><span class="path">services/worker-health.ts</span><span class="lang">TS</span></header>
+<div class="grid">
+<div class="box what"><b>What</b><p><code>markDeadWorkers</code> sets workers with no heartbeat for 10 s to DEAD and logs it once.</p></div>
+<div class="box why"><b>Why</b><p>The dashboard and the planner must not count a frozen worker as available. The task it held is not lost: it was never acknowledged, so RabbitMQ redelivers it. If the worker wakes up, its heartbeat sets it back to IDLE.</p></div>
+</div></article>
+
+<article class="file" id="f-straggler"><header><span class="path">services/backup-copies.ts</span><span class="lang">TS</span></header>
+<div class="grid">
+<div class="box what"><b>What</b><p>If a worker is idle and nothing waits in the queue, publish a <b>duplicate</b> of a task that has run longer than <code>2 ×</code> the median (and at least 1 s).</p></div>
+<div class="box why"><b>Why</b><p>A slow worker should not delay the end of a job. The first copy to finish wins; the later result is ignored as a duplicate. It only fires when a worker would otherwise be idle, so it never steals capacity from real work.</p></div>
+</div>
+<details><summary>Key code</summary><script type="text/plain" class="code">if (elapsedMs <= Math.max(MIN_BACKUP_AGE_MS, config.backupFactor * median)) continue;
+await publish(TASK_QUEUE, buildTaskMessage(task, task.attempts, true));   // isBackup = true
+await pool.query("UPDATE tasks SET backup_sent = true WHERE id = $1", [task.id]);   // at most one backup</script></details></article>
+
+<article class="file" id="f-retry"><header><span class="path">result-handler.ts · handleFailedTask</span><span class="lang">TS</span></header>
+<div class="grid">
+<div class="box what"><b>What</b><p>If a worker reports FAILED: below 3 attempts the task goes back to PENDING and is published again; at 3 attempts the job is marked FAILED with the error.</p></div>
+<div class="box why"><b>Why</b><p>Temporary problems (a busy disk) should not fail a whole job, but a task that never works must not loop forever. Retries are safe because tasks write to fixed or unique paths.</p></div>
+</div></article>
+
+<article class="file" id="f-cancel"><header><span class="path">job-service.ts · cancelJob</span><span class="lang">TS</span></header>
+<div class="grid">
+<div class="box what"><b>What</b><p><code>DELETE /jobs/:id</code> marks the job CANCELLED and its unpublished tasks FAILED. Tasks already in the queue are skipped by workers (<code>SKIPPED</code>), and late results are discarded.</p></div>
+<div class="box why"><b>Why</b><p>Cancelling must be fast and must not corrupt anything. Workers never need to be interrupted, and the freed queue slots go straight to other jobs.</p></div>
+</div></article>
+
+<!-- ================= STAGE 9 ================= -->
+<h2 class="stage" id="s9"><span class="sn">9</span>Scripts and tests</h2>
+<div class="flow"><a href="#f-scripts">scripts/</a><i>·</i><a href="#f-tests">tests</a><i>·</i><a href="#f-bench">bench/</a></div>
+
+<article class="file" id="f-scripts"><header><span class="path">scripts/demo.sh · scripts/kill-worker.sh</span><span class="lang">Bash</span></header>
+<div class="grid">
+<div class="box what"><b>What</b><p><code>demo.sh</code> creates a job, waits for it, downloads the CSV and runs <code>verify.py</code>. <code>kill-worker.sh</code> sends <code>kill -9</code> to one worker process.</p></div>
+<div class="box why"><b>Why</b><p>One command that proves the whole system works end to end, and a crash test that shows a killed worker does not break the result: the task is redelivered and the manager restarts the worker.</p></div>
+</div></article>
+
+<article class="file" id="f-tests"><header><span class="path">services/worker/tests/test_computation.py · services/api/tests/integration/*.js</span><span class="lang">Tests</span></header>
+<div class="grid">
+<div class="box what"><b>What</b><p>Python unit tests for the maths (the assignment example, uneven groups, mixed partial and raw inputs, size limits). Integration tests run the planner rules and <code>applyWorkerResult</code> against a real database inside rolled-back transactions.</p></div>
+<div class="box why"><b>Why</b><p>The two risky parts are the arithmetic and the scheduling decisions. The unit tests need no services at all. The integration tests check the planner and result handler on real SQL, including duplicates, retries and a wrong final count.</p></div>
+</div></article>
+
+<article class="file" id="f-bench"><header><span class="path">bench/simulate.py · bench/planner_check.py</span><span class="lang">PY</span></header>
+<div class="grid">
+<div class="box what"><b>What</b><p><code>simulate.py</code> compares four scheduling strategies on workers of different speeds. <code>planner_check.py</code> runs the waiting items rules on random jobs and asserts a correct mean, count = F, no task over 5 inputs and no deadlock.</p></div>
+<div class="box why"><b>Why</b><p>These are quick, standalone models used to choose the design and to test the planner rules before touching the real system.</p></div>
+</div></article>
+
+</main>
+</div>
+
+<script>
+/* turn <script type="text/plain" class="code"> blocks into <pre><code>, dim comment lines */
+document.querySelectorAll('script.code').forEach(function(s){
+  var pre=document.createElement('pre');var code=document.createElement('code');
+  s.textContent.split('\n').forEach(function(line,i,arr){
+    var t=line.trim();var span=document.createElement('span');
+    span.textContent=line+(i<arr.length-1?'\n':'');
+    if(t.indexOf('//')===0||t.indexOf('#')===0)span.className='c';
+    code.appendChild(span);
+  });
+  pre.appendChild(code);s.parentNode.insertBefore(pre,s.nextSibling);
+});
+document.getElementById('openAll').onclick=function(){document.querySelectorAll('details').forEach(function(d){d.open=true;});};
+document.getElementById('closeAll').onclick=function(){document.querySelectorAll('details').forEach(function(d){d.open=false;});};
+
+/* scroll-spy: highlight the current stage in the sidebar and in the overview picture */
+var links=[].slice.call(document.querySelectorAll('#nav a'));
+var ids=['overview','s1','s2','s3','s4','s5','s6','s7','s8','s9'];
+function spy(){
+  var cur=0;
+  ids.forEach(function(id,i){var el=document.getElementById(id);if(el&&el.getBoundingClientRect().top<160)cur=i;});
+  links.forEach(function(a,i){a.classList.toggle('act',i===cur);});
+  document.querySelectorAll('.nodeb').forEach(function(g){g.classList.toggle('on',Number(g.getAttribute('data-n'))===cur);});
+}
+window.addEventListener('scroll',spy,{passive:true});spy();
+</script>
+</body>
+</html>

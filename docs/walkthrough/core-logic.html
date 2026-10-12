@@ -1,0 +1,668 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Core Logic Explained</title>
+<style>
+:root{
+  --bg:#fafaf7;--card:#ffffff;--ink:#1b1f24;--mut:#5b6573;--line:#d9dde3;
+  --blue:#2563eb;--blueBg:#e8f0ff;--orange:#d9730d;--orBg:#fff1e0;
+  --green:#15803d;--grBg:#e6f6ec;--red:#c0392b;--hot:#fff0a0;--code:#f1f3f6;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#14171c;--card:#1c2128;--ink:#e6e9ee;--mut:#9aa4b2;--line:#333b46;
+    --blue:#6ea1ff;--blueBg:#1d2a44;--orange:#f0a04b;--orBg:#3a2a15;
+    --green:#5fd08a;--grBg:#15301f;--red:#ff8a7a;--hot:#4a4310;--code:#232a33;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#14171c;--card:#1c2128;--ink:#e6e9ee;--mut:#9aa4b2;--line:#333b46;
+  --blue:#6ea1ff;--blueBg:#1d2a44;--orange:#f0a04b;--orBg:#3a2a15;
+  --green:#5fd08a;--grBg:#15301f;--red:#ff8a7a;--hot:#4a4310;--code:#232a33;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:980px;margin:0 auto;padding:24px 16px 80px}
+h1{font-size:30px;margin:8px 0 4px}
+h2{font-size:22px;margin:48px 0 8px;padding-top:8px;border-top:1px solid var(--line)}
+h3{font-size:17px;margin:20px 0 6px}
+p{margin:8px 0}
+.lead{color:var(--mut);font-size:17px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin:12px 0}
+.answer{border-left:5px solid var(--blue);background:var(--blueBg)}
+.warn{border-left:5px solid var(--orange);background:var(--orBg)}
+.good{border-left:5px solid var(--green);background:var(--grBg)}
+code,.mono{font-family:ui-monospace,Consolas,Menlo,monospace;font-size:.9em;background:var(--code);padding:1px 5px;border-radius:4px}
+table{border-collapse:collapse;width:100%;margin:10px 0;font-size:15px}
+th,td{border:1px solid var(--line);padding:7px 9px;text-align:left;vertical-align:top}
+th{background:var(--code)}
+.btn{font:inherit;font-size:14px;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:7px;padding:5px 12px;cursor:pointer}
+.btn:hover{border-color:var(--blue)}
+.btn.on{background:var(--blue);color:#fff;border-color:var(--blue)}
+.controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:10px 0}
+.controls label{font-size:14px;color:var(--mut)}
+select{font:inherit;font-size:14px;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:4px}
+.tag{display:inline-block;font-size:12px;padding:1px 8px;border-radius:99px;border:1px solid var(--line);color:var(--mut)}
+.msgdot{color:var(--blue);font-weight:700}.datadot{color:var(--orange);font-weight:700}
+
+/* sum+count demo */
+.sc td,.sc th{text-align:center;min-width:56px}
+.sc .lab{text-align:left}
+.sc td.v{transition:background .3s,opacity .3s}
+.sc td.hid{opacity:.08}
+.sc td.hl{background:var(--hot)}
+
+/* architecture svg */
+svg{max-width:100%;height:auto;display:block}
+.node rect{fill:var(--card);stroke:var(--line);stroke-width:1.5;transition:fill .3s,stroke .3s}
+.node.hot rect{fill:var(--hot);stroke:var(--blue);stroke-width:2.5}
+.node text{fill:var(--ink);font-size:13px;text-anchor:middle}
+.node .t{font-weight:700;font-size:14px}
+.node .s{fill:var(--mut);font-size:11px}
+.link{fill:none;stroke:var(--line);stroke-width:2}
+.link.on.msg{stroke:var(--blue)}
+.link.on.data{stroke:var(--orange)}
+.lg{font-size:12px;fill:var(--mut)}
+.steps{list-style:none;padding:0;margin:8px 0;display:flex;flex-wrap:wrap;gap:6px}
+.steps li{border:1px solid var(--line);background:var(--card);border-radius:99px;padding:2px 11px;font-size:13px;cursor:pointer}
+.steps li.act{background:var(--blue);color:#fff;border-color:var(--blue)}
+.cap{min-height:96px}
+.cap b.t{font-size:17px}
+
+/* simulator */
+.sim{display:grid;grid-template-columns:1fr 1.25fr 1.25fr;gap:10px;margin:10px 0}
+@media (max-width:760px){.sim{grid-template-columns:1fr}}
+.col{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px;min-height:210px}
+.col h4{margin:0 0 2px;font-size:14px}
+.col .sub{font-size:12px;color:var(--mut);margin-bottom:8px}
+.pill{display:inline-block;font-size:12px;border:1px solid var(--line);border-radius:6px;padding:2px 7px;margin:2px 3px 2px 0;background:var(--code)}
+.pill.c{background:var(--blueBg);border-color:var(--blue)}
+.wk{border:1px solid var(--line);border-radius:8px;padding:7px 9px;margin-bottom:8px}
+.wk.busy{border-color:var(--blue);background:var(--blueBg)}
+.wk.slowish{border-style:dashed}
+.wk .h{display:flex;justify-content:space-between;font-size:13px}
+.wk .st{font-size:13px;margin:3px 0}
+.bar{height:6px;background:var(--line);border-radius:3px;overflow:hidden;margin-top:5px}
+.bar i{display:block;height:100%;background:var(--blue)}
+.chip{display:inline-flex;flex-direction:column;gap:3px;border:1px solid var(--line);background:var(--card);border-radius:7px;padding:3px 6px;margin:3px 4px 3px 0;font-size:12px;min-width:84px}
+.chip b{font-size:12px}
+.chip .n{color:var(--mut)}
+.chip.res{border-color:var(--green);background:var(--grBg)}
+.strip{display:flex;height:7px;border-radius:2px;overflow:hidden;background:var(--line);width:100%}
+.strip i{flex:1;display:block}
+@keyframes pop{from{transform:scale(.6);opacity:0}to{transform:scale(1);opacity:1}}
+.stats{display:flex;flex-wrap:wrap;gap:8px 18px;font-size:14px;margin:8px 0}
+.stats span b{font-variant-numeric:tabular-nums}
+.rules td.hot,.rules tr.hot td{background:var(--hot)}
+#log{max-height:260px;overflow:auto;font-size:13.5px;border:1px solid var(--line);border-radius:8px;background:var(--card)}
+#log div{padding:4px 10px;border-bottom:1px solid var(--line)}
+#log .t{color:var(--mut);font-variant-numeric:tabular-nums;margin-right:6px}
+#log .w{border-left:4px solid var(--blue)}
+#log .p{border-left:4px solid var(--orange);background:var(--orBg)}
+#log .s{border-left:4px solid var(--green)}
+#decision{min-height:58px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:760px){.two{grid-template-columns:1fr}}
+ul.tight{margin:6px 0;padding-left:20px}
+ul.tight li{margin:3px 0}
+
+/* worked example */
+.loop{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:6px 0 12px;font-size:13px}
+.loop .lc{border:1px solid var(--line);background:var(--card);border-radius:8px;padding:4px 10px;transition:all .3s}
+.loop .lc.on{background:var(--hot);border-color:var(--blue);font-weight:700}
+.loop .ar{color:var(--mut)}
+.wx3{display:grid;grid-template-columns:1fr 1.1fr 1.1fr;gap:10px;margin-top:10px}
+@media (max-width:860px){.wx3{grid-template-columns:1fr}}
+.wx3 .col{min-height:0}
+.wx3 table{font-size:12.5px;margin:4px 0}
+.wx3 th,.wx3 td{padding:4px 6px}
+.wx3 tr.new td{background:var(--hot)}
+.wx3 tr.dim td{color:var(--mut)}
+.bd{font-size:11px;font-weight:700;padding:1px 6px;border-radius:99px;border:1px solid var(--line)}
+.bd.DONE,.bd.USED{color:var(--mut)}
+.bd.QUEUED{color:var(--blue);border-color:var(--blue)}
+.bd.READY{color:var(--orange);border-color:var(--orange)}
+.bd.COMPLETED{color:var(--green);border-color:var(--green)}
+.wline{font-size:13px;border:1px solid var(--line);border-radius:7px;padding:5px 8px;margin-bottom:6px}
+.wline.busy{background:var(--blueBg);border-color:var(--blue)}
+.cap ol{margin:6px 0;padding-left:20px}
+.cap li{margin:4px 0}
+.math{font-family:ui-monospace,Consolas,monospace;font-size:12.5px;background:var(--code);border-radius:6px;padding:4px 8px;margin:4px 0;display:block;overflow-x:auto;white-space:nowrap}
+</style>
+</head>
+<body>
+<main>
+
+<h1>How the system really works</h1>
+<p class="lead">Only the core logic: what each part does, how the data moves, and exactly when files get combined. No Docker, no setup. Everything with a <b>▶</b> is animated.</p>
+
+<!-- ============ 1 ============ -->
+<h2>1. Your question, answered first</h2>
+<div class="card answer">
+<p><b>Do we collect all the partial results and then combine them? Or do we combine whenever a worker is free?</b></p>
+<p><b>The second one, with a small twist.</b> We never wait for everything. Each job has a <b>basket</b> of finished pieces. Every time any worker finishes something, the scheduler looks in the basket and decides whether to start a new combine task right now. So <b>combining starts while files are still being generated</b>, and the last combine is the only one that divides.</p>
+</div>
+<div class="two">
+<div class="card warn">
+<b>What we do NOT do</b>
+<ul class="tight">
+<li>Generate all F files first, <i>then</i> start combining (workers would sit idle, and the disk fills up first).</li>
+<li>Build a fixed tree in advance ("pair file 1 with file 2…"). Workers have different speeds, so a fixed plan would stall on the slowest.</li>
+</ul>
+</div>
+<div class="card good">
+<b>What we do</b>
+<ul class="tight">
+<li>Keep a basket of ready pieces.</li>
+<li>Whenever a result arrives, look at the basket and decide (4 simple rules, section 6).</li>
+<li>A fast worker finishes sooner, so it comes back sooner and takes more work. Nothing is pre-assigned.</li>
+</ul>
+</div>
+</div>
+
+<!-- ============ 2 ============ -->
+<h2>2. The one idea everything rests on: a piece is "sums + count"</h2>
+<p>A job has F files, each a list of C numbers. We want, for every position, the mean over all F files. One worker may only hold 5 files, so we need partial answers that can be merged later. The partial answer must never be an average, because averages of groups with different sizes can't be merged. Instead every piece carries:</p>
+<ul class="tight">
+<li><b>sums</b>: a list of C numbers (for each position, the total of the files it covers)</li>
+<li><b>count</b>: how many original files it covers</li>
+</ul>
+<p>A freshly generated file is already a valid piece: its sums are the file itself and its count is 1. <b>Merging any pieces = add position by position, add the counts.</b> You divide once, at the very end.</p>
+
+<div class="card">
+<div class="controls"><button class="btn" id="scReplay">▶ Replay</button><span class="tag">example: C = 3 numbers per file, F = 2 files</span></div>
+<table class="sc" id="sc">
+<tr><th class="lab"></th><th>position 0</th><th>position 1</th><th>position 2</th><th>count</th></tr>
+<tr><td class="lab">file A (piece)</td><td class="v" data-c="0">1</td><td class="v" data-c="1">2</td><td class="v" data-c="2">3</td><td>1</td></tr>
+<tr><td class="lab">file B (piece)</td><td class="v" data-c="0">4</td><td class="v" data-c="1">5</td><td class="v" data-c="2">6</td><td>1</td></tr>
+<tr><td class="lab"><b>merge</b> = add column by column</td><td class="v out" data-c="0">5</td><td class="v out" data-c="1">7</td><td class="v out" data-c="2">9</td><td class="v cnt">2</td></tr>
+<tr><td class="lab"><b>final</b> = divide by count (once)</td><td class="v fin">2.5</td><td class="v fin">3.5</td><td class="v fin">4.5</td><td class="v fin">÷ 2</td></tr>
+</table>
+</div>
+
+<div class="card warn">
+<b>Why not just average the averages?</b> Take one position with values 1, 1, 1, 1, 1, 7. True mean = 12 / 6 = <b>2</b>. If a group of 5 gives average 1 and a group of 1 gives average 7, the average of those is 4. <b>Wrong</b>, because the single file got the same weight as five. With sums and counts: (5 + 7) / (5 + 1) = 2. <b>Right</b>, in any order and any grouping. That freedom is what lets workers combine whatever is ready.
+</div>
+
+<!-- ============ 3 ============ -->
+<h2>3. Who does what</h2>
+<table>
+<tr><th style="width:150px">Part</th><th>Its one job</th><th>Does it touch the big numbers?</th></tr>
+<tr><td><b>Client</b></td><td>Says "F files, C numbers each". Later checks progress and downloads the result.</td><td>No</td></tr>
+<tr><td><b>API</b></td><td>Checks the request, creates the job, and splits it into <b>GENERATE tasks</b> of up to 5 files each (F = 12 gives 3 tasks: files 0–4, 5–9, 10–11). Answers status questions.</td><td>No</td></tr>
+<tr><td><b>Database</b></td><td>The notebook. Remembers every job, every task and its status, and every <b>piece</b> (its file path, its count, and whether it is <span class="mono">READY</span> in the basket or <span class="mono">USED</span> by a combine).</td><td>No, only paths and counts</td></tr>
+<tr><td><b>Task queue</b></td><td>The hand-out line. Tasks wait here. A worker takes <b>one at a time</b>, so whoever is free first gets the next one.</td><td>No</td></tr>
+<tr><td><b>Worker</b></td><td>Does exactly one task, then asks for another. It does not know the big picture. <b>GENERATE</b>: make up to 5 random files and save them. <b>COMBINE</b>: read up to 5 pieces from disk (one at a time), add them, save the new piece.</td><td><b>Yes</b></td></tr>
+<tr><td><b>Results queue</b></td><td>Workers drop a tiny "I'm done, here are the new piece paths and counts" note here.</td><td>No</td></tr>
+<tr><td><b>Scheduler + planner</b></td><td>The brain. Reads one result at a time, updates the notebook, then asks the <b>planner</b>: "given what's in the basket, should I create a combine task now?"</td><td>No</td></tr>
+<tr><td><b>Shared disk</b></td><td>Where all the big arrays live. Everyone else passes around paths.</td><td><b>Yes</b> (it is the data)</td></tr>
+</table>
+<div class="card good">The key design choice: <b>messages carry paths and counts, never the numbers.</b> The numbers only travel between a worker and the disk.</div>
+
+<!-- ============ 4 ============ -->
+<h2>4. ▶ Follow the data (one job, start to finish)</h2>
+<p><span class="msgdot">Blue dots</span> are small messages. <span class="datadot">Orange dots</span> are the big arrays being read from or written to disk. Click a step, or let it play.</p>
+
+<div class="card">
+<svg viewBox="0 0 860 400" id="flowsvg" role="img" aria-label="Data flow diagram">
+  <defs></defs>
+  <!-- links -->
+  <path id="p_client_api" class="link" d="M140,55 L190,55"/>
+  <path id="p_api_db" class="link" d="M320,55 L430,55"/>
+  <path id="p_api_q" class="link" d="M215,80 L215,190"/>
+  <path id="p_q_w" class="link" d="M320,220 L430,220"/>
+  <path id="p_w_disk" class="link" d="M490,250 L490,330"/>
+  <path id="p_disk_w" class="link" d="M525,330 L525,250"/>
+  <path id="p_w_rq" class="link" d="M580,220 L690,220"/>
+  <path id="p_rq_s" class="link" d="M760,190 L760,80"/>
+  <path id="p_s_db" class="link" d="M690,55 L580,55"/>
+  <path id="p_s_q" class="link" d="M705,80 L705,128 L285,128 L285,190"/>
+  <!-- nodes -->
+  <g class="node" id="n_client"><rect x="30" y="30" width="110" height="50" rx="8"/><text class="t" x="85" y="52">Client</text><text class="s" x="85" y="68">F, C</text></g>
+  <g class="node" id="n_api"><rect x="190" y="30" width="130" height="50" rx="8"/><text class="t" x="255" y="52">API</text><text class="s" x="255" y="68">creates tasks</text></g>
+  <g class="node" id="n_db"><rect x="430" y="30" width="150" height="50" rx="8"/><text class="t" x="505" y="52">Database</text><text class="s" x="505" y="68">tasks · pieces · basket</text></g>
+  <g class="node" id="n_sched"><rect x="690" y="30" width="140" height="50" rx="8"/><text class="t" x="760" y="52">Scheduler</text><text class="s" x="760" y="68">+ planner (the brain)</text></g>
+  <g class="node" id="n_q"><rect x="190" y="190" width="130" height="60" rx="8"/><text class="t" x="255" y="216">Task queue</text><text class="s" x="255" y="234">tasks waiting</text></g>
+  <g class="node" id="n_w"><rect x="430" y="190" width="150" height="60" rx="8"/><text class="t" x="505" y="216">Workers</text><text class="s" x="505" y="234">W1  W2  W3 …</text></g>
+  <g class="node" id="n_rq"><rect x="690" y="190" width="140" height="60" rx="8"/><text class="t" x="760" y="216">Results queue</text><text class="s" x="760" y="234">"done" notes</text></g>
+  <g class="node" id="n_disk"><rect x="405" y="330" width="150" height="50" rx="8"/><text class="t" x="480" y="352">Shared disk</text><text class="s" x="480" y="368">all big arrays (.npy)</text></g>
+  <!-- legend -->
+  <circle cx="40" cy="300" r="5" fill="var(--blue)"/><text class="lg" x="52" y="304">small message (ids, paths, counts)</text>
+  <circle cx="40" cy="324" r="5" fill="var(--orange)"/><text class="lg" x="52" y="328">big arrays (read / write file)</text>
+  <g id="dots"></g>
+</svg>
+<ol class="steps" id="flowSteps"></ol>
+<div class="controls"><button class="btn" id="fPrev">◀ Prev</button><button class="btn on" id="fPlay">⏸ Pause</button><button class="btn" id="fNext">Next ▶</button></div>
+<div class="card cap" id="flowCap"></div>
+</div>
+
+<!-- ============ 4b ============ -->
+<h2>4b. ▶ One real example with actual numbers (F = 12, C = 2)</h2>
+<p>File <i>i</i> is <span class="mono">[i+1, 10·(i+1)]</span>, so file 0 is <span class="mono">[1, 10]</span> and file 11 is <span class="mono">[12, 120]</span>. The true answer is <span class="mono">[78/12, 780/12] = [6.5, 65]</span>. Three equal workers. Every step below is one <b>event</b>, and every event runs the same loop:</p>
+<div class="card" id="wx">
+  <div class="loop" id="wxLoop">
+    <span class="lc">① Worker finishes and reports</span><span class="ar">→</span>
+    <span class="lc">② Scheduler records it in the database</span><span class="ar">→</span>
+    <span class="lc">③ Planner looks at the basket</span><span class="ar">→</span>
+    <span class="lc">④ New COMBINE task to the queue (or wait)</span>
+  </div>
+  <ol class="steps" id="wxSteps"></ol>
+  <div class="controls"><button class="btn" id="wxPrev">◀ Prev</button><button class="btn" id="wxNext">Next ▶</button><span class="tag">yellow rows = what just changed</span></div>
+  <div class="cap" id="wxCap"></div>
+  <div class="wx3">
+    <div class="col"><h4>Workers</h4><div class="sub">what each one is doing now</div><div id="wxWorkers"></div></div>
+    <div class="col"><h4>Database: tasks</h4><div class="sub">QUEUED = waiting in the queue or being worked on</div><div id="wxTasks"></div></div>
+    <div class="col"><h4>Database: items (pieces)</h4><div class="sub">READY = in the basket · USED = given to a task</div><div id="wxItems"></div></div>
+  </div>
+  <p id="wxBasket" style="margin:10px 0 0"></p>
+</div>
+
+<!-- ============ 5 ============ -->
+<h2>5. ▶ Watch the basket (a live simulation of the real rules)</h2>
+<p>This runs the same decision logic as the planner in the code, on a pretend job. Three workers; one can be made slow. Watch three things: <b>files appear in the basket</b>, <b>combine tasks start before all files exist</b>, and the <b>colored bar</b> on each piece, which shows which original files it contains. At the end one piece contains every file exactly once.</p>
+
+<div class="controls">
+  <button class="btn on" id="sPlay">▶ Play</button>
+  <button class="btn" id="sStep">Next event ⏭</button>
+  <button class="btn" id="sReset">Reset</button>
+  <label>Files (F) <select id="sF"><option>6</option><option selected>12</option><option>30</option><option>60</option></select></label>
+  <label>Speed <select id="sSpeed"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="5">5×</option></select></label>
+  <label><input type="checkbox" id="sSlow" checked> W3 is 3× slower</label>
+</div>
+
+<div class="stats">
+  <span>time <b id="stT">0.0</b> s</span>
+  <span>files generated <b id="stG">0</b> / <b id="stF">12</b></span>
+  <span>pieces in basket <b id="stB">0</b></span>
+  <span>tasks waiting <b id="stW">0</b></span>
+  <span title="Sum of the counts of every piece that exists right now (basket + being merged)">total count held <b id="stC">0</b></span>
+</div>
+
+<div class="sim">
+  <div class="col"><h4>① Task queue</h4><div class="sub">waiting for a free worker</div><div id="todo"></div></div>
+  <div class="col"><h4>② Workers</h4><div class="sub">one task each, then they come back</div><div id="workers"></div></div>
+  <div class="col"><h4>③ Basket (READY pieces)</h4><div class="sub">each: name · count · which files are inside</div><div id="basket"></div></div>
+</div>
+
+<div class="card" id="decision"><b>Planner:</b> press Play.</div>
+
+<h3>The four planner rules (the last one that fired is highlighted)</h3>
+<table class="rules" id="rules">
+<tr><th style="width:36px">#</th><th>Condition (for one job)</th><th>Action</th><th>Why</th></tr>
+<tr id="r1"><td>1</td><td>Basket has <b>5 or more</b> pieces</td><td>Take 5 and create a COMBINE task <i>now</i>. Repeat while ≥ 5 remain.</td><td>A full-size task is the most efficient use of a worker. No reason to wait.</td></tr>
+<tr id="r2"><td>2</td><td>Basket has 2 to 5 pieces, <b>all files are generated</b>, and <b>no other task is queued or running</b></td><td>Create the <b>FINAL</b> combine: add, then divide by the total count.</td><td>Nothing else can ever arrive, so this is the last step.</td></tr>
+<tr id="r3"><td>3</td><td>Basket has 2 to 4 pieces, <b>a worker is idle</b> and <b>nothing is waiting in the queue</b></td><td>Combine what's there (not final).</td><td>The worker would otherwise do nothing. Merging early keeps the basket small.</td></tr>
+<tr id="r4"><td>4</td><td>Exactly <b>1</b> piece, everything generated, nothing in flight</td><td>FINAL task that only divides.</td><td>Safety net so a job can never get stuck at the end.</td></tr>
+</table>
+<p>Otherwise: <b>wait</b>. If every worker is busy there's no point creating a tiny task that would just sit in line.</p>
+
+<h3>Event log</h3>
+<div id="log"></div>
+
+<!-- ============ 6 ============ -->
+<h2>6. Tracing F = 12 by hand (the default simulation, 3 equal workers)</h2>
+<p>Untick "W3 is 3× slower" and press Reset to see exactly this. Times are simulated seconds.</p>
+<div class="card">
+<ol class="tight">
+<li><b>t = 0.</b> 12 files become 3 GENERATE tasks: files 0–4, 5–9, 10–11. Each of the 3 workers takes one.</li>
+<li><b>t = 2.</b> W3 had the short chunk (2 files), so it finishes first. Two pieces (f10, f11) land in the basket. A worker is idle and the queue is empty, so <b>rule 3</b> merges them straight away. This happens <i>while W1 and W2 are still generating</i>.</li>
+<li><b>t = 3.6.</b> W3 finishes: a partial <b>P1 with count 2</b> goes into the basket.</li>
+<li><b>t = 5.</b> W1 and W2 finish. The basket now holds 11 pieces (P1 and f0 … f9). <b>Rule 1</b> fires twice: two COMBINE tasks of 5 pieces each. Groups can be any mix, because counts travel with the sums. W1 and W2 take them.</li>
+<li><b>t = 8.1.</b> Both finish with partials of count <b>6</b> and <b>5</b>. One loose piece (f9) is still in the basket. Everything is generated and nothing else is running, so <b>rule 2</b> creates the <b>FINAL</b> task for those 3 pieces.</li>
+<li><b>t = 10.2.</b> The final worker adds them (6 + 5 + 1 = <b>12</b> files), divides every position by 12 and writes <span class="mono">result.csv</span>. The scheduler checks <b>count = 12 = F</b> and marks the job COMPLETED. Any other count would mark the job FAILED instead of returning a wrong mean.</li>
+</ol>
+<p>With the slow W3 on, W3 just takes longer on its chunk. The others keep going and nobody waits for W3.</p>
+</div>
+
+<h2>7. Where the information lives</h2>
+<table>
+<tr><th style="width:160px">Place</th><th>What's in it</th><th>Example</th></tr>
+<tr><td>Disk</td><td>The numbers. Raw files, partial sums, the result.</td><td><span class="mono">raw/00003.npy</span>, <span class="mono">partials/9f2c….npy</span>, <span class="mono">result.csv</span></td></tr>
+<tr><td>Database</td><td>The bookkeeping: job (F, C, status), tasks (type, inputs, status, attempts), pieces (path, count, <span class="mono">READY</span>/<span class="mono">USED</span>).</td><td>"piece partials/9f2c… has count 5 and is READY"</td></tr>
+<tr><td>Queues</td><td>Short-lived messages that say "do this" or "I did this".</td><td><span class="mono">COMBINE inputs=[{path,count}×5]</span></td></tr>
+<tr><td>Worker memory</td><td>One input at a time plus the running total. Never all 5 at once.</td><td>2 arrays of C numbers</td></tr>
+</table>
+
+<h2>8. The whole thing in ten lines</h2>
+<div class="card">
+<ol class="tight">
+<li>Client asks for F files of C numbers.</li>
+<li>API cuts it into GENERATE tasks of ≤ 5 files and puts them in the queue.</li>
+<li>Each free worker takes one task, creates the files, writes them to disk, reports paths with count 1.</li>
+<li>The scheduler stores each new piece in the basket (database).</li>
+<li>After every result the planner looks at the basket and may create a COMBINE task (≤ 5 pieces).</li>
+<li>A worker takes that task, reads the pieces one at a time, adds position by position, writes a new piece with the summed count.</li>
+<li>The new piece goes back in the basket. Steps 5–7 repeat, overlapping with generation.</li>
+<li>When all files exist and nothing else runs, the planner creates the FINAL combine.</li>
+<li>The final combine divides by the total count and writes <span class="mono">result.csv</span>.</li>
+<li>The scheduler checks that the count equals F and marks the job COMPLETED.</li>
+</ol>
+</div>
+
+</main>
+
+<script>
+/* ---------------- sum + count animation ---------------- */
+(function(){
+  const tbl=document.getElementById('sc');
+  const cells=[...tbl.querySelectorAll('td.v')];
+  let stage=0,timer=null;
+  function paint(){
+    cells.forEach(td=>{
+      const c=td.dataset.c;
+      const isOut=td.classList.contains('out'),isCnt=td.classList.contains('cnt'),isFin=td.classList.contains('fin');
+      let hide=false,hl=false;
+      if(isOut){hide=!(stage>=Number(c)+1);hl=(stage===Number(c)+1)}
+      if(!isOut&&!isCnt&&!isFin){hl=(stage===Number(c)+1)}
+      if(isCnt){hide=stage<4;hl=stage===4}
+      if(isFin){hide=stage<5;hl=stage===5}
+      td.classList.toggle('hid',hide);td.classList.toggle('hl',hl);
+    });
+  }
+  function run(){
+    clearInterval(timer);stage=0;paint();
+    timer=setInterval(()=>{stage=(stage+1)%8;paint();},1100);
+  }
+  document.getElementById('scReplay').onclick=run;run();
+})();
+
+/* ---------------- data flow diagram ---------------- */
+(function(){
+  const svg=document.getElementById('flowsvg');
+  const dotsG=document.getElementById('dots');
+  const NS='http://www.w3.org/2000/svg';
+  const M='msg',D='data';
+  const STEPS=[
+   {n:'Ask',t:'You ask for a job',paths:[['p_client_api',M]],hot:['n_client','n_api'],
+    x:'The client sends <span class="mono">POST /jobs {F:12, C:3}</span>. The API checks the numbers are in range. Nothing is generated yet.'},
+   {n:'Plan',t:'The API writes the to-do list',paths:[['p_api_db',M]],hot:['n_api','n_db'],
+    x:'It saves the job and cuts it into <b>GENERATE tasks</b> of up to 5 files: <span class="mono">[0..4]</span>, <span class="mono">[5..9]</span>, <span class="mono">[10,11]</span>. The database is now the notebook that knows what must be done.'},
+   {n:'Queue',t:'Tasks go into the queue',paths:[['p_api_q',M]],hot:['n_api','n_q'],
+    x:'Only a few tasks are put in the line at a time (enough to keep every worker busy), not all 100 000. Each message is tiny: <span class="mono">{taskId, fileIndexes:[0,1,2,3,4]}</span>.'},
+   {n:'Pick up',t:'A free worker takes ONE task',paths:[['p_q_w',M]],hot:['n_q','n_w'],
+    x:'Workers take one task, finish it, and only then take the next. A fast worker comes back sooner and so ends up doing more tasks. Nobody decides this in advance: it happens by itself.'},
+   {n:'Generate',t:'Worker creates files and saves them',paths:[['p_w_disk',D]],hot:['n_w','n_disk'],
+    x:'For each file index it makes C random numbers and writes <span class="mono">raw/00000.npy</span>, <span class="mono">raw/00001.npy</span>… to the shared disk. Each file is already a valid <b>piece</b>: sums = the file, count = 1.'},
+   {n:'Report',t:'Worker reports, with no numbers',paths:[['p_w_rq',M]],hot:['n_w','n_rq'],
+    x:'The message says: <span class="mono">done: raw/00000.npy (count 1), raw/00001.npy (count 1) …</span>. Only paths and counts. The big data stays on disk.'},
+   {n:'Record',t:'Scheduler fills the basket',paths:[['p_rq_s',M],['p_s_db',M]],hot:['n_rq','n_sched','n_db'],
+    x:'The scheduler reads one result at a time and, in one safe database step, marks the task done and adds the new pieces as <span class="mono">READY</span>. That is the <b>basket</b>.'},
+   {n:'Decide',t:'Planner decides: combine now?',paths:[['p_s_db',M],['p_s_q',M]],hot:['n_sched','n_db','n_q'],
+    x:'Right after recording, the planner looks at the basket (section 5 rules). If there are enough pieces it creates a <b>COMBINE task</b> listing up to 5 inputs <span class="mono">[{path,count}…]</span>, marks them USED and puts the task in the queue. If not, it waits for the next result.'},
+   {n:'Combine',t:'A worker merges up to 5 pieces',paths:[['p_q_w',M],['p_disk_w',D],['p_w_disk',D]],hot:['n_q','n_w','n_disk'],
+    x:'The worker reads the inputs <b>one at a time</b> from disk, adds each into a running total (position by position) and adds the counts. It writes the total as a new <b>partial piece</b>. Because only one input plus the total is in memory, the 5-file limit holds.'},
+   {n:'Loop',t:'The new piece goes back to the basket',paths:[['p_w_rq',M],['p_rq_s',M],['p_s_db',M]],hot:['n_w','n_rq','n_sched','n_db'],
+    x:'Same as before: report path + summed count, scheduler records it as READY, planner looks again. This loop repeats <b>while other workers are still generating</b>. Pieces get bigger (count 1 → 5 → 12 …) until one piece covers everything.'},
+   {n:'Final',t:'Last combine divides and finishes',paths:[['p_disk_w',D],['p_w_disk',D],['p_w_rq',M],['p_rq_s',M],['p_s_db',M]],hot:['n_w','n_disk','n_sched','n_db'],
+    x:'When all F files exist and nothing else is running, the planner makes the <b>FINAL</b> task. It adds, then <b>divides by the total count</b> once, and writes <span class="mono">result.csv</span>. The scheduler checks count = F, then marks the job <b>COMPLETED</b>. The client can download the file.'}
+  ];
+  const ol=document.getElementById('flowSteps'),cap=document.getElementById('flowCap');
+  STEPS.forEach((s,i)=>{const li=document.createElement('li');li.textContent=(i+1)+' '+s.n;li.onclick=()=>{go(i);};ol.appendChild(li);});
+  let cur=0,playing=true,auto=null,dots=[];
+  function clearDots(){dotsG.innerHTML='';dots=[];}
+  function go(i){
+    cur=(i+STEPS.length)%STEPS.length;
+    const s=STEPS[cur];
+    [...ol.children].forEach((li,k)=>li.classList.toggle('act',k===cur));
+    svg.querySelectorAll('.link').forEach(l=>{l.classList.remove('on','msg','data');});
+    svg.querySelectorAll('.node').forEach(n=>n.classList.toggle('hot',s.hot.includes(n.id)));
+    clearDots();
+    s.paths.forEach(([id,kind])=>{
+      const p=document.getElementById(id);p.classList.add('on',kind);
+      const len=p.getTotalLength();
+      for(let k=0;k<3;k++){
+        const c=document.createElementNS(NS,'circle');c.setAttribute('r',6);
+        c.setAttribute('fill',kind===M?'var(--blue)':'var(--orange)');
+        dotsG.appendChild(c);dots.push({c,p,len,off:k/3});
+      }
+    });
+    cap.innerHTML='<b class="t">Step '+(cur+1)+' of '+STEPS.length+': '+s.t+'</b><p>'+s.x+'</p>';
+    restartAuto();
+  }
+  function restartAuto(){clearTimeout(auto);if(playing)auto=setTimeout(()=>go(cur+1),6500);}
+  function frame(now){
+    dots.forEach(d=>{const u=((now/1700)+d.off)%1;const pt=d.p.getPointAtLength(d.len*u);d.c.setAttribute('cx',pt.x);d.c.setAttribute('cy',pt.y);});
+    requestAnimationFrame(frame);
+  }
+  document.getElementById('fPrev').onclick=()=>go(cur-1);
+  document.getElementById('fNext').onclick=()=>go(cur+1);
+  const pb=document.getElementById('fPlay');
+  pb.onclick=()=>{playing=!playing;pb.textContent=playing?'⏸ Pause':'▶ Play';pb.classList.toggle('on',playing);restartAuto();};
+  go(0);requestAnimationFrame(frame);
+})();
+
+/* ---------------- worked example ---------------- */
+(function(){
+  const $=id=>document.getElementById(id);
+  const V={};for(let i=0;i<12;i++)V['f'+i]=['['+(i+1)+', '+10*(i+1)+']',1];
+  V.P1=['[23, 230]',2];V.P2=['[33, 330]',6];V.P3=['[35, 350]',5];V.RESULT=['[6.5, 65]',12];
+  const TK={T1:['GENERATE','files 0–4'],T2:['GENERATE','files 5–9'],T3:['GENERATE','files 10–11'],
+    T4:['COMBINE','f10, f11'],T5:['COMBINE','P1, f0, f1, f2, f3'],T6:['COMBINE','f4, f5, f6, f7, f8'],T7:['FINAL','f9, P2, P3']};
+  const used=(names)=>{const o={};names.forEach(n=>o[n]='USED');return o;};
+  const f=(a,b)=>{const o=[];for(let i=a;i<=b;i++)o.push('f'+i);return o;};
+  const S=[
+   {n:'t=0',t:'t = 0: job created',
+    cap:['<b>API</b> cut 12 files into 3 GENERATE tasks (up to 5 files each) and queued them. Each worker took one.','Nothing in the database yet except the tasks. No pieces exist, so the basket is empty.','The planner has nothing to do: no pieces.'],
+    w:['W1|GENERATE files 0–4|1','W2|GENERATE files 5–9|1','W3|GENERATE files 10–11|1'],
+    tasks:{T1:'QUEUED',T2:'QUEUED',T3:'QUEUED'},items:{}},
+   {n:'t=2',t:'t = 2: W3 finishes T3 (it had the short chunk)',
+    cap:['<b>W3</b> generated f10 = [11, 110] and f11 = [12, 120], wrote both to disk and reported "paths, count 1 each".','<b>Scheduler</b>: T3 → <b>DONE</b>. f10 and f11 inserted as new items, <b>READY</b>.','<b>Planner</b>: basket has 2 pieces, W3 is idle and nothing waits in the queue → <b>rule 3</b>. It creates <b>T4 = COMBINE(f10, f11)</b> and marks f10, f11 <b>USED</b> right now, so nobody else can take them. W1 and W2 are still generating.'],
+    w:['W1|GENERATE files 0–4|1','W2|GENERATE files 5–9|1','W3|COMBINE T4: f10 + f11|1'],
+    tasks:{T1:'QUEUED',T2:'QUEUED',T3:'DONE',T4:'QUEUED'},items:{f10:'USED',f11:'USED'}},
+   {n:'t=3.6',t:'t = 3.6: W3 finishes T4',
+    cap:['<b>W3</b> loaded f10, then added f11, one at a time:<span class="math">[11, 110] + [12, 120] = [23, 230]   count 1 + 1 = 2</span>It wrote this as a new partial file and reported "count 2".','<b>Scheduler</b>: T4 → <b>DONE</b>. New item <b>P1 = [23, 230], count 2</b> inserted <b>READY</b>.','<b>Planner</b>: only 1 piece in the basket, not all files are generated, and the other workers are busy → <b>no rule fires, wait</b>.'],
+    w:['W1|GENERATE files 0–4|1','W2|GENERATE files 5–9|1','W3|idle|0'],
+    tasks:{T1:'QUEUED',T2:'QUEUED',T3:'DONE',T4:'DONE'},items:{f10:'USED',f11:'USED',P1:'READY'}},
+   {n:'t=5',t:'t = 5: W1 and W2 finish generating',
+    cap:['<b>W1</b> and <b>W2</b> wrote f0 … f9 to disk and reported them (count 1 each).','<b>Scheduler</b>: T1, T2 → <b>DONE</b>. Ten new items, <b>READY</b>. The basket now holds 11 pieces: P1, f0 … f9.','<b>Planner</b>: <b>rule 1</b> twice (5 or more pieces). <b>T5 = COMBINE(P1, f0, f1, f2, f3)</b> and <b>T6 = COMBINE(f4 … f8)</b>. Each has exactly 5 inputs. A partial counts as one input like any file. f9 is left over.'],
+    w:['W1|COMBINE T5: P1 + f0 + f1 + f2 + f3|1','W2|COMBINE T6: f4 + f5 + f6 + f7 + f8|1','W3|idle (queue empty)|0'],
+    tasks:{T1:'DONE',T2:'DONE',T3:'DONE',T4:'DONE',T5:'QUEUED',T6:'QUEUED'},
+    items:Object.assign({f10:'USED',f11:'USED',P1:'USED'},used(f(0,8)),{f9:'READY'})},
+   {n:'t=8.1',t:'t = 8.1: W1 and W2 finish their combines',
+    cap:['<b>W1</b> (T5), running total after each input:<span class="math">P1 [23,230] → +f0 [24,240] → +f1 [26,260] → +f2 [29,290] → +f3 [33,330]   count 2+1+1+1+1 = 6</span><b>W2</b> (T6):<span class="math">f4 [5,50] → +f5 [11,110] → +f6 [18,180] → +f7 [26,260] → +f8 [35,350]   count 5</span>','<b>Scheduler</b>: T5, T6 → <b>DONE</b>. New items <b>P2 = [33, 330] count 6</b> and <b>P3 = [35, 350] count 5</b>, <b>READY</b>. Basket: f9, P2, P3.','<b>Planner</b>: all 12 files generated and no other task queued or running → <b>rule 2</b>. It creates <b>T7 = FINAL(f9, P2, P3)</b>, 3 inputs, and marks them USED.'],
+    w:['W1|FINAL T7: f9 + P2 + P3, then ÷ count|1','W2|idle|0','W3|idle|0'],
+    tasks:{T1:'DONE',T2:'DONE',T3:'DONE',T4:'DONE',T5:'DONE',T6:'DONE',T7:'QUEUED'},
+    items:Object.assign({f10:'USED',f11:'USED',P1:'USED'},used(f(0,9)),{P2:'USED',P3:'USED'})},
+   {n:'t=10.2',t:'t = 10.2: W1 finishes the FINAL task',
+    cap:['<b>W1</b> added the three pieces, then divided once:<span class="math">f9 [10,100] + P2 [33,330] + P3 [35,350] = [78, 780]   count 1+6+5 = 12</span><span class="math">[78, 780] ÷ 12 = [6.5, 65]</span>It wrote <span class="mono">result.csv</span> and reported count 12.','<b>Scheduler</b>: T7 → <b>DONE</b>. It checks <b>count 12 = F 12 ✓</b> and sets the job to <b>COMPLETED</b>.','<b>Planner</b>: nothing left to do. A different count would have marked the job FAILED instead of returning a wrong mean.'],
+    w:['W1|idle|0','W2|idle|0','W3|idle|0'],
+    tasks:{T1:'DONE',T2:'DONE',T3:'DONE',T4:'DONE',T5:'DONE',T6:'DONE',T7:'DONE'},
+    items:Object.assign({f10:'USED',f11:'USED',P1:'USED'},used(f(0,9)),{P2:'USED',P3:'USED',RESULT:'COMPLETED'})}
+  ];
+  const ol=$('wxSteps');let cur=0;
+  S.forEach((s,i)=>{const li=document.createElement('li');li.textContent=s.n;li.onclick=()=>go(i);ol.appendChild(li);});
+  const bd=s=>'<span class="bd '+s+'">'+s+'</span>';
+  function go(i){
+    cur=(i+S.length)%S.length;const s=S[cur],pv=cur?S[cur-1]:{tasks:{},items:{}};
+    [...ol.children].forEach((li,k)=>li.classList.toggle('act',k===cur));
+    $('wxCap').innerHTML='<b class="t">'+s.t+'</b><ol>'+s.cap.map(c=>'<li>'+c+'</li>').join('')+'</ol>';
+    $('wxWorkers').innerHTML=s.w.map(x=>{const a=x.split('|');return '<div class="wline '+(a[2]==='1'?'busy':'')+'"><b>'+a[0]+'</b> · '+a[1]+'</div>';}).join('');
+    $('wxTasks').innerHTML='<table><tr><th>id</th><th>type</th><th>inputs</th><th>status</th></tr>'+Object.keys(s.tasks).map(k=>'<tr class="'+(pv.tasks[k]!==s.tasks[k]?'new':'')+'"><td>'+k+'</td><td>'+TK[k][0]+'</td><td>'+TK[k][1]+'</td><td>'+bd(s.tasks[k])+'</td></tr>').join('')+'</table>';
+    const keys=Object.keys(s.items);
+    $('wxItems').innerHTML=keys.length?'<table><tr><th>item</th><th>sums</th><th>count</th><th>state</th></tr>'+keys.map(k=>'<tr class="'+(pv.items[k]!==s.items[k]?'new':(s.items[k]==='USED'?'dim':''))+'"><td>'+k+'</td><td class="mono">'+V[k][0]+'</td><td>'+V[k][1]+'</td><td>'+bd(s.items[k])+'</td></tr>').join('')+'</table>':'<span class="sub">(no items yet)</span>';
+    const basket=keys.filter(k=>s.items[k]==='READY');
+    $('wxBasket').innerHTML='<b>Basket right now (READY):</b> '+(basket.length?basket.map(k=>'<span class="pill c">'+k+' · count '+V[k][1]+'</span>').join(''):'<span class="sub">empty</span>')+(s.items.RESULT?' <b style="color:var(--green)">Final result stored, job COMPLETED.</b>':'');
+    const lc=[...$('wxLoop').querySelectorAll('.lc')];lc.forEach(e=>e.classList.remove('on'));
+    [0,1,2,3].forEach((k,j)=>setTimeout(()=>{if(cur===S.indexOf(s)){lc.forEach(e=>e.classList.remove('on'));lc[k].classList.add('on');}},j*600));
+  }
+  $('wxPrev').onclick=()=>go(cur-1);$('wxNext').onclick=()=>go(cur+1);
+  go(0);
+})();
+
+/*SIM-START*/
+function makeSim(F, slowOn){
+  const MAXN = 5;
+  const sp = slowOn ? [1,1,3] : [1,1,1];
+  const s = {
+    t:0, F, status:'RUNNING', filesGen:0, nextTask:1, nextPiece:1,
+    workers: sp.map((v,i)=>({id:'W'+(i+1), speed:v, task:null, done:0})),
+    waiting:[], ready:[], log:[], rule:null, decision:null, result:null
+  };
+  const say=(msg,kind)=>s.log.push({t:s.t,msg,kind});
+  for(let i=0;i<F;i+=MAXN){
+    const files=[]; for(let k=i;k<Math.min(F,i+MAXN);k++) files.push(k);
+    s.waiting.push({id:'T'+(s.nextTask++), type:'GEN', files});
+  }
+  say('Job created: '+F+' files → '+s.waiting.length+' GENERATE tasks (up to 5 files each) are waiting in the queue.','s');
+  const running=()=>s.workers.filter(w=>w.task).length;
+  const inFlight=()=>s.waiting.length+running();
+  const dur=(task,w)=> (task.type==='GEN' ? 1.0*task.files.length : 0.6+0.5*task.inputs.length)*w.speed;
+  const rng=(a)=>a.length>1?a[0]+'–'+a[a.length-1]:''+a[0];
+  function mkCombine(items,isFinal){
+    const task={id:'T'+(s.nextTask++), type:'COMB', inputs:items, final:isFinal};
+    s.waiting.push(task);
+  }
+  function plan(){
+    const allGen = s.filesGen===s.F;
+    let fleetIdle = s.workers.some(w=>!w.task) && s.waiting.length===0;
+    let fl = inFlight();
+    const names=()=>s.ready.length+' piece'+(s.ready.length===1?'':'s');
+    s.decision = 'Basket has '+names()+(allGen?', all files generated':', '+s.filesGen+'/'+s.F+' files generated')+', '+fl+' task'+(fl===1?'':'s')+' queued/running'+', '+(s.workers.some(w=>!w.task)?'a worker is idle':'all workers busy')+'. ';
+    let made=0, lastRule=null;
+    for(;;){
+      if(s.ready.length>=MAXN){
+        const take=s.ready.splice(0,MAXN);
+        const fin = s.ready.length===0 && fl===0 && allGen;
+        mkCombine(take,fin); fl++; made++; lastRule=fin?2:1;
+        say('Planner (rule '+(fin?'2':'1')+'): basket had ≥ 5 pieces → new '+(fin?'FINAL ':'')+'COMBINE task for 5 pieces ('+take.map(p=>p.label).join(', ')+').','p');
+        continue;
+      }
+      if(s.ready.length>=2 && fl===0 && allGen){
+        const take=s.ready.splice(0); mkCombine(take,true); fl++; made++; lastRule=2;
+        say('Planner (rule 2): everything generated, nothing else running → FINAL task for '+take.length+' pieces ('+take.map(p=>p.label).join(', ')+') = '+take.reduce((a,p)=>a+p.count,0)+' files.','p');
+        break;
+      }
+      if(s.ready.length>=2 && fleetIdle){
+        const take=s.ready.splice(0); mkCombine(take,false); fl++; made++; lastRule=3; fleetIdle=false;
+        say('Planner (rule 3): a worker is idle and the queue is empty → combine the '+take.length+' pieces waiting ('+take.map(p=>p.label).join(', ')+') instead of leaving the worker idle.','p');
+        break;
+      }
+      if(s.ready.length===1 && fl===0 && allGen){
+        const take=s.ready.splice(0); mkCombine(take,true); fl++; made++; lastRule=4;
+        say('Planner (rule 4): one piece left, all done → FINAL task that only divides.','p');
+        break;
+      }
+      break;
+    }
+    if(made===0){
+      s.decision += 'No rule fires → <b>wait</b>.';
+      s.rule = null;
+    } else {
+      s.rule = lastRule;
+      s.decision += '→ <b>rule '+lastRule+'</b> fired, '+made+' combine task'+(made>1?'s':'')+' created.';
+    }
+  }
+  function dispatch(){
+    s.workers.forEach(w=>{
+      if(!w.task && s.waiting.length){
+        const task=s.waiting.shift();
+        task.start=s.t; task.end=s.t+dur(task,w); w.task=task;
+        if(task.type==='GEN') say(w.id+' takes GENERATE for files '+rng(task.files)+'.','w');
+        else say(w.id+' takes '+(task.final?'FINAL ':'')+'COMBINE of '+task.inputs.length+' pieces (count '+task.inputs.reduce((a,p)=>a+p.count,0)+').','w');
+      }
+    });
+  }
+  function complete(w){
+    const task=w.task; w.task=null; w.done++;
+    if(task.type==='GEN'){
+      task.files.forEach(i=>s.ready.push({id:s.nextPiece++, label:'f'+i, count:1, covered:[i]}));
+      s.filesGen+=task.files.length;
+      say(w.id+' finished GENERATE: '+task.files.length+' new file piece'+(task.files.length>1?'s':'')+' (count 1 each) go into the basket.','w');
+    } else {
+      const covered=[].concat(...task.inputs.map(p=>p.covered));
+      const count=task.inputs.reduce((a,p)=>a+p.count,0);
+      if(task.final){
+        s.result={count,covered,ok:count===s.F};
+        s.status = s.result.ok ? 'COMPLETED':'FAILED';
+        say(w.id+' finished FINAL: added all pieces, divided by '+count+' → result.csv. Scheduler checks count '+count+' = F '+s.F+(s.result.ok?' ✓ job COMPLETED.':' ✗ FAILED.'),'s');
+      } else {
+        const label='P'+(s.nextPartial=(s.nextPartial||0)+1);
+        s.ready.push({id:s.nextPiece++, label, count, covered});
+        say(w.id+' finished COMBINE: new piece '+label+' with count '+count+' goes into the basket.','w');
+      }
+    }
+  }
+  function nextEvent(){
+    let m=Infinity; s.workers.forEach(w=>{if(w.task&&w.task.end<m)m=w.task.end}); return m;
+  }
+  s.advance=function(to){
+    for(;;){
+      const e=nextEvent();
+      if(e>to||s.status!=='RUNNING')break;
+      s.t=e;
+      s.workers.forEach(w=>{if(w.task&&w.task.end<=e+1e-9&&s.status==='RUNNING')complete(w)});
+      if(s.status==='RUNNING'){plan();dispatch();}
+    }
+    if(s.status==='RUNNING')s.t=Math.min(to,Math.max(s.t,to));
+  };
+  s.stepEvent=function(){const e=nextEvent(); if(e<Infinity)s.advance(e);};
+  s.inFlight=inFlight;
+  plan(); dispatch();
+  s.decision='Job just created, nothing generated yet, so the basket is empty. Workers have taken the first tasks.';s.rule=null;
+  return s;
+}
+/*SIM-END*/
+
+/* ---------------- simulator UI ---------------- */
+(function(){
+  const $=id=>document.getElementById(id);
+  let sim,playing=true,last=null,logN=0;
+  const hue=(i,F)=>'hsl('+Math.round(i/F*300)+',70%,55%)';
+  function strip(covered,F){
+    const set=new Set(covered);let h='<span class="strip">';
+    for(let i=0;i<F;i++)h+='<i style="background:'+(set.has(i)?hue(i,F):'transparent')+'"></i>';
+    return h+'</span>';
+  }
+  function chip(p,F,extra){return '<span class="chip'+(extra||'')+'"><b>'+p.label+'</b><span class="n">count '+p.count+'</span>'+strip(p.covered,F)+'</span>';}
+  function build(){
+    const F=Number($('sF').value);
+    sim=makeSim(F,$('sSlow').checked);logN=0;$('log').innerHTML='';render();
+  }
+  function render(){
+    const s=sim,F=s.F;
+    $('stT').textContent=s.t.toFixed(1);$('stG').textContent=s.filesGen;$('stF').textContent=F;
+    $('stB').textContent=s.ready.length;$('stW').textContent=s.waiting.length;
+    let held=s.ready.reduce((a,p)=>a+p.count,0);
+    s.workers.forEach(w=>{if(w.task&&w.task.type==='COMB')held+=w.task.inputs.reduce((a,p)=>a+p.count,0)});
+    if(s.result)held=s.result.count;
+    $('stC').textContent=held;
+    $('todo').innerHTML=s.waiting.length?s.waiting.map(t=>t.type==='GEN'?'<span class="pill">GENERATE files '+(t.files.length>1?t.files[0]+'–'+t.files[t.files.length-1]:t.files[0])+'</span>':'<span class="pill c">'+(t.final?'FINAL ':'')+'COMBINE × '+t.inputs.length+'</span>').join(''):'<span class="sub">(empty)</span>';
+    $('workers').innerHTML=s.workers.map(w=>{
+      const t=w.task;let body,pct=0;
+      if(!t)body='<span class="sub">idle · done '+w.done+' task'+(w.done===1?'':'s')+'</span>';
+      else{
+        pct=Math.min(100,100*(s.t-t.start)/(t.end-t.start));
+        body=t.type==='GEN'?'GENERATING files '+(t.files.length>1?t.files[0]+'–'+t.files[t.files.length-1]:t.files[0])
+          :(t.final?'FINAL combine ÷ ':'COMBINE ')+'<div>'+t.inputs.map(p=>chip(p,F)).join('')+'</div>';
+      }
+      return '<div class="wk '+(t?'busy ':'')+(w.speed>1?'slowish':'')+'"><div class="h"><b>'+w.id+'</b><em>'+(w.speed>1?'slow ×'+w.speed:'normal')+'</em></div><div class="st">'+body+'</div><div class="bar"><i style="width:'+pct+'%"></i></div></div>';
+    }).join('');
+    $('basket').innerHTML=(s.result?chip({label:'RESULT',count:s.result.count,covered:s.result.covered},F,' res')+'<div class="sub">'+(s.result.ok?'count = F ✓ every file counted exactly once':'count ≠ F ✗')+'</div>':'')
+      +(s.ready.length?s.ready.map(p=>chip(p,F)).join(''):(s.result?'':'<span class="sub">(empty)</span>'));
+    $('decision').innerHTML='<b>Planner after the last result:</b> '+(s.decision||'')+(s.status==='COMPLETED'?' <b style="color:var(--green)">Job COMPLETED.</b>':'');
+    [1,2,3,4].forEach(r=>$('r'+r).classList.toggle('hot',s.rule===r));
+    if(s.log.length!==logN){
+      const lg=$('log');
+      for(let i=logN;i<s.log.length;i++){const e=s.log[i];const d=document.createElement('div');d.className=e.kind;d.innerHTML='<span class="t">'+e.t.toFixed(1)+'s</span>'+e.msg;lg.insertBefore(d,lg.firstChild);}
+      logN=s.log.length;
+    }
+    $('sPlay').textContent=playing?'⏸ Pause':'▶ Play';$('sPlay').classList.toggle('on',playing);
+  }
+  function loop(now){
+    if(last===null)last=now;
+    const dt=(now-last)/1000;last=now;
+    if(playing&&sim.status==='RUNNING')sim.advance(sim.t+dt*Number($('sSpeed').value));
+    render();requestAnimationFrame(loop);
+  }
+  $('sPlay').onclick=()=>{playing=!playing;};
+  $('sStep').onclick=()=>{playing=false;sim.stepEvent();};
+  $('sReset').onclick=()=>{build();playing=true;};
+  $('sF').onchange=()=>{build();};
+  $('sSlow').onchange=()=>{build();};
+  build();requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

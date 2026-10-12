@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 430" width="900" height="430" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif">
+  <title>High-level design</title>
+  <style>
+    .nd rect{fill:#ffffff;stroke:#c3cad4;stroke-width:1.6}
+    .store rect{fill:#e8f0ff;stroke:#2563eb}
+    .queue rect{fill:#fff1e0;stroke:#c2640a}
+    .work rect{fill:#e6f6ec;stroke:#15803d}
+    .brain rect{fill:#fff0a0;stroke:#c2640a}
+    .ext rect{stroke-dasharray:4 3}
+    .nt{fill:#1b1f24;font-size:14px;font-weight:700;text-anchor:middle}
+    .ns{fill:#5f6977;font-size:11.5px;text-anchor:middle}
+    .ar{fill:none;stroke:#5f6977;stroke-width:1.8}
+    .dash{stroke-dasharray:5 4}
+    .ahead{fill:#5f6977}
+    .lg{fill:#5f6977;font-size:11.5px}
+    .bg circle{fill:#2563eb}
+    .bg text{fill:#ffffff;font-size:11px;font-weight:700;text-anchor:middle}
+  </style>
+  <defs><marker id="ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="ahead"/></marker></defs>
+  <rect width="900" height="430" fill="#ffffff"/>
+
+  <!-- links -->
+  <path class="ar" d="M140,55 L190,55" marker-end="url(#ah)"/>
+  <path class="ar" d="M320,55 L430,55" marker-end="url(#ah)"/>
+  <path class="ar" d="M215,80 L215,190" marker-end="url(#ah)"/>
+  <path class="ar" d="M320,220 L430,220" marker-end="url(#ah)"/>
+  <path class="ar" d="M490,250 L490,330" marker-end="url(#ah)"/>
+  <path class="ar" d="M525,330 L525,250" marker-end="url(#ah)"/>
+  <path class="ar" d="M580,220 L690,220" marker-end="url(#ah)"/>
+  <path class="ar" d="M760,190 L760,80" marker-end="url(#ah)"/>
+  <path class="ar" d="M690,55 L580,55" marker-end="url(#ah)"/>
+  <path class="ar" d="M705,80 L705,128 L285,128 L285,190" marker-end="url(#ah)"/>
+  <path class="ar dash" d="M320,345 L440,248" marker-end="url(#ah)"/>
+
+  <!-- nodes -->
+  <g class="nd ext"><rect x="30" y="30" width="110" height="50" rx="9"/><text class="nt" x="85" y="50">User / UI</text><text class="ns" x="85" y="67">dashboard</text></g>
+  <g class="nd"><rect x="190" y="30" width="130" height="50" rx="9"/><text class="nt" x="255" y="50">API</text><text class="ns" x="255" y="67">Express + TypeScript</text></g>
+  <g class="nd store"><rect x="430" y="30" width="150" height="50" rx="9"/><text class="nt" x="505" y="50">Database</text><text class="ns" x="505" y="67">PostgreSQL</text></g>
+  <g class="nd brain"><rect x="690" y="30" width="140" height="50" rx="9"/><text class="nt" x="760" y="50">Scheduler</text><text class="ns" x="760" y="67">planner inside</text></g>
+  <g class="nd queue"><rect x="190" y="190" width="130" height="60" rx="9"/><text class="nt" x="255" y="216">Task queue</text><text class="ns" x="255" y="234">RabbitMQ</text></g>
+  <g class="nd work"><rect x="430" y="190" width="150" height="60" rx="9"/><text class="nt" x="505" y="216">Workers × W</text><text class="ns" x="505" y="234">Python</text></g>
+  <g class="nd queue"><rect x="690" y="190" width="140" height="60" rx="9"/><text class="nt" x="760" y="216">Result queue</text><text class="ns" x="760" y="234">RabbitMQ</text></g>
+  <g class="nd store"><rect x="405" y="330" width="150" height="50" rx="9"/><text class="nt" x="480" y="350">File storage</text><text class="ns" x="480" y="367">shared folder (.npy)</text></g>
+  <g class="nd"><rect x="190" y="330" width="130" height="50" rx="9"/><text class="nt" x="255" y="350">Worker manager</text><text class="ns" x="255" y="367">keeps W alive</text></g>
+
+  <!-- step numbers -->
+  <g class="bg"><circle cx="165" cy="45" r="10"/><text x="165" y="49">1</text></g>
+  <g class="bg"><circle cx="375" cy="45" r="10"/><text x="375" y="49">2</text></g>
+  <g class="bg"><circle cx="205" cy="135" r="10"/><text x="205" y="139">3</text></g>
+  <g class="bg"><circle cx="375" cy="210" r="10"/><text x="375" y="214">4</text></g>
+  <g class="bg"><circle cx="480" cy="292" r="10"/><text x="480" y="296">5</text></g>
+  <g class="bg"><circle cx="635" cy="210" r="10"/><text x="635" y="214">6</text></g>
+  <g class="bg"><circle cx="770" cy="135" r="10"/><text x="770" y="139">7</text></g>
+  <g class="bg"><circle cx="495" cy="118" r="10"/><text x="495" y="122">8</text></g>
+
+  <text class="lg" x="560" y="318">read inputs / write outputs</text>
+  <text class="lg" x="30" y="415">dashed = bonus: the manager starts or stops worker processes to match the desired count stored in the database</text>
+</svg>

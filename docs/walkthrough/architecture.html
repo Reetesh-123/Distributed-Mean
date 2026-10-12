@@ -1,0 +1,623 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Distributed Mean - How It Works</title>
+<style>
+  :root {
+    --bg:#f6f7f9; --card:#fff; --text:#1c2430; --muted:#5d6879; --line:#e3e6ec; --line2:#b9c0cc;
+    --code-bg:#f0f2f6; --accent:#2f6fed;
+    --c-api:#2f6fed; --c-db:#7b4fd6; --c-mq:#e07b00; --c-worker:#1a8a4a; --c-sched:#c2307a; --c-disk:#6b7280; --c-user:#0e8a9a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg:#12151b; --card:#1b2029; --text:#e6e9ef; --muted:#9aa4b5; --line:#2a303b; --line2:#4a5262;
+      --code-bg:#12161d; --accent:#6b9bff;
+      --c-api:#6b9bff; --c-db:#a98bf0; --c-mq:#f0a040; --c-worker:#4cc07d; --c-sched:#ec6fae; --c-disk:#9aa4b5; --c-user:#4cc6d6;
+    }
+  }
+  * { box-sizing:border-box; }
+  html { scroll-behavior:smooth; }
+  body { margin:0; background:var(--bg); color:var(--text); font:15px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif; }
+  nav { position:sticky; top:0; z-index:5; background:var(--card); border-bottom:1px solid var(--line); padding:8px 16px; overflow-x:auto; white-space:nowrap; }
+  nav a { color:var(--muted); text-decoration:none; margin-right:14px; font-size:13px; }
+  nav a:hover { color:var(--accent); }
+  main { max-width:980px; margin:0 auto; padding:16px 16px 80px; }
+  h1 { font-size:26px; margin:20px 0 4px; }
+  h2 { font-size:21px; margin:0 0 6px; }
+  h3 { font-size:16px; margin:20px 0 6px; }
+  .lead { color:var(--muted); margin:0 0 18px; }
+  .part { margin:44px 0 12px; padding:6px 12px; border-left:4px solid var(--accent); font-size:13px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); background:var(--card); border-radius:0 6px 6px 0; }
+  section { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:20px; margin-bottom:18px; }
+  p { margin:8px 0; }
+  ul, ol { margin:8px 0; padding-left:22px; }
+  li { margin:3px 0; }
+  code { font-family:ui-monospace,Consolas,monospace; font-size:.9em; background:var(--code-bg); padding:1px 5px; border-radius:4px; }
+  pre { background:var(--code-bg); border:1px solid var(--line); border-radius:8px; padding:12px 14px; overflow-x:auto; font:12.5px/1.5 ui-monospace,Consolas,monospace; margin:10px 0; }
+  pre code { background:none; padding:0; font-size:inherit; }
+  .file { display:inline-block; font:12px ui-monospace,Consolas,monospace; color:var(--muted); margin-top:8px; }
+  table { border-collapse:collapse; width:100%; margin:10px 0; font-size:14px; }
+  th, td { text-align:left; vertical-align:top; padding:7px 10px; border-bottom:1px solid var(--line); }
+  th { color:var(--muted); font-weight:600; font-size:12px; text-transform:uppercase; letter-spacing:.04em; }
+  .scroll { overflow-x:auto; }
+  .callout { border-left:4px solid var(--c-mq); background:var(--code-bg); padding:10px 14px; border-radius:0 8px 8px 0; margin:12px 0; }
+  .callout.good { border-color:var(--c-worker); }
+  .tag { display:inline-block; font-size:11px; font-weight:600; padding:1px 8px; border-radius:999px; border:1px solid currentColor; vertical-align:middle; }
+  .t-api{color:var(--c-api)} .t-db{color:var(--c-db)} .t-mq{color:var(--c-mq)} .t-worker{color:var(--c-worker)} .t-sched{color:var(--c-sched)} .t-disk{color:var(--c-disk)}
+  .diagram { overflow-x:auto; margin:12px 0; border:1px solid var(--line); border-radius:10px; background:var(--bg); padding:6px; }
+  .diagram svg { display:block; margin:0 auto; max-width:100%; height:auto; }
+  svg text { fill:var(--text); font-family:system-ui,-apple-system,"Segoe UI",sans-serif; }
+  svg .muted { fill:var(--muted); }
+  svg .b { font-weight:600; }
+  svg .box { fill:var(--card); stroke:var(--line2); stroke-width:1.5; }
+  svg .f-api{fill:var(--c-api);fill-opacity:.13;stroke:var(--c-api);stroke-width:1.8}
+  svg .f-db{fill:var(--c-db);fill-opacity:.13;stroke:var(--c-db);stroke-width:1.8}
+  svg .f-mq{fill:var(--c-mq);fill-opacity:.15;stroke:var(--c-mq);stroke-width:1.8}
+  svg .f-worker{fill:var(--c-worker);fill-opacity:.14;stroke:var(--c-worker);stroke-width:1.8}
+  svg .f-sched{fill:var(--c-sched);fill-opacity:.13;stroke:var(--c-sched);stroke-width:1.8}
+  svg .f-disk{fill:var(--c-disk);fill-opacity:.13;stroke:var(--c-disk);stroke-width:1.8}
+  svg .f-user{fill:var(--c-user);fill-opacity:.13;stroke:var(--c-user);stroke-width:1.8}
+  svg .area { fill:none; stroke:var(--line2); stroke-width:1.5; stroke-dasharray:6 4; }
+  svg .arrow { stroke:var(--text); stroke-width:1.8; fill:none; }
+  svg .arrow-dash { stroke:var(--muted); stroke-width:1.5; fill:none; stroke-dasharray:5 4; }
+  svg .badge { fill:var(--accent); }
+  svg .badge-t { fill:#fff; font-size:12px; font-weight:700; text-anchor:middle; }
+  svg .halo { paint-order:stroke; stroke:var(--bg); stroke-width:5px; stroke-linejoin:round; }
+  svg .halo-card { paint-order:stroke; stroke:var(--card); stroke-width:5px; stroke-linejoin:round; }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  @media (max-width:760px){ .grid2 { grid-template-columns:1fr; } }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin:8px 0; }
+  .chip { padding:3px 10px; border-radius:6px; border:1px solid var(--line2); background:var(--code-bg); font:12px ui-monospace,Consolas,monospace; }
+  .chip.arrow { border:none; background:none; color:var(--muted); padding:0 2px; }
+</style>
+</head>
+<body>
+<nav>
+  <a href="#picture">The picture</a><a href="#architecture">Architecture</a><a href="#life">Life of a job</a><a href="#tree">Combining</a>
+  <a href="#docker">Docker</a><a href="#states">Statuses</a><a href="#codemap">Code map</a><a href="#code1">Create job</a>
+  <a href="#code2">Worker</a><a href="#code3">Results</a><a href="#code4">Planner</a><a href="#code5">Failures</a>
+</nav>
+<main>
+
+<h1>Distributed Mean: how it works</h1>
+<p style="border-left:4px solid #d9730d;padding:6px 12px;background:rgba(217,115,13,.1)"><b>Note:</b> file and function names here match the refactored code (see "Project structure" in the README). The code excerpts are shortened for reading; the real files carry more comments and typed names.</p>
+<p class="lead">Start with the big picture, then Docker (what is actually running on your machine), then the code behind each box.</p>
+
+<!-- ============================ PART A ============================ -->
+<div class="part">Part A: the high-level picture</div>
+
+<section id="picture">
+  <h2>1. What problem are we solving?</h2>
+  <p>A user asks for a <b>job</b>: "take <b>F</b> files, each with <b>C</b> random numbers, and give me one file with the average of each position". Example: files <code>[1,2,3]</code> and <code>[4,5,6]</code> give <code>[2.5, 3.5, 4.5]</code>.</p>
+  <p>F can be up to 99,999, so one machine can't do it quickly. Each worker can only hold <b>5 files</b> at a time, and workers run at <b>different speeds</b>. So the system must split the job, hand pieces to many workers, and combine the pieces, all without anyone waiting for slow workers.</p>
+
+  <h3>The kitchen analogy</h3>
+  <div class="scroll"><table>
+    <tr><th>In a restaurant kitchen</th><th>In our system</th></tr>
+    <tr><td>A big catering order</td><td>A <b>job</b> (F files of C numbers)</td></tr>
+    <tr><td>The waiter who takes the order</td><td><span class="tag t-api">API</span> (Express, TypeScript)</td></tr>
+    <tr><td>The order book</td><td><span class="tag t-db">PostgreSQL</span>: remembers every job, task and status</td></tr>
+    <tr><td>The ticket rail</td><td><span class="tag t-mq">RabbitMQ</span>: queues of small tasks waiting for a cook</td></tr>
+    <tr><td>The cooks (some faster, some slower)</td><td><span class="tag t-worker">Workers</span> (Python): each takes one ticket at a time</td></tr>
+    <tr><td>The pantry everybody shares</td><td><span class="tag t-disk">Shared folder</span> <code>/data</code>: the actual number files</td></tr>
+    <tr><td>The head chef who watches finished dishes and decides what to cook next</td><td><span class="tag t-sched">Scheduler</span>: reads results, creates the next tasks</td></tr>
+  </table></div>
+
+  <div class="callout good"><b>The one idea everything rests on.</b> Every piece of work returns a list of per-position <b>sums</b> plus a <b>count</b> of how many files it covers, never an average. Adding sums and counts works in any order, so any worker can combine any pieces whenever they are ready. Divide once, at the very end. (This is the MapReduce pattern: generating files is the "map", combining is the "reduce".)</div>
+</section>
+
+<section id="architecture">
+  <h2>2. The architecture</h2>
+  <p>Six parts. The numbers show the order things happen in for one task. Read the arrows as "sends something to".</p>
+  <div class="diagram">
+  <svg viewBox="0 0 900 540" role="img" aria-label="System architecture">
+    <defs>
+      <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor" style="color:var(--text)"/></marker>
+    </defs>
+    <!-- boxes -->
+    <rect class="f-user" x="20" y="40" width="130" height="70" rx="10"/>
+    <text x="85" y="70" text-anchor="middle" class="b">You</text>
+    <text x="85" y="90" text-anchor="middle" class="muted" font-size="12">browser or curl</text>
+
+    <rect class="f-api" x="200" y="40" width="170" height="70" rx="10"/>
+    <text x="285" y="68" text-anchor="middle" class="b">API</text>
+    <text x="285" y="88" text-anchor="middle" class="muted" font-size="12">Express + TypeScript</text>
+    <text x="285" y="103" text-anchor="middle" class="muted" font-size="11">port 3000, dashboard</text>
+
+    <rect class="f-db" x="200" y="230" width="170" height="86" rx="10"/>
+    <text x="285" y="258" text-anchor="middle" class="b">PostgreSQL</text>
+    <text x="285" y="278" text-anchor="middle" class="muted" font-size="12">jobs · tasks · items</text>
+    <text x="285" y="294" text-anchor="middle" class="muted" font-size="12">workers · events</text>
+
+    <rect class="f-sched" x="200" y="420" width="170" height="80" rx="10"/>
+    <text x="285" y="450" text-anchor="middle" class="b">Scheduler</text>
+    <text x="285" y="470" text-anchor="middle" class="muted" font-size="12">TypeScript</text>
+    <text x="285" y="486" text-anchor="middle" class="muted" font-size="11">reads results, plans next</text>
+
+    <rect class="area" x="450" y="24" width="210" height="496" rx="12"/>
+    <text x="555" y="46" text-anchor="middle" class="muted" font-size="12">RabbitMQ</text>
+    <rect class="f-mq" x="470" y="58" width="170" height="70" rx="10"/>
+    <text x="555" y="88" text-anchor="middle" class="b">tasks queue</text>
+    <text x="555" y="108" text-anchor="middle" class="muted" font-size="12">work waiting for a worker</text>
+    <rect class="f-mq" x="470" y="420" width="170" height="80" rx="10"/>
+    <text x="555" y="450" text-anchor="middle" class="b">results queue</text>
+    <text x="555" y="470" text-anchor="middle" class="muted" font-size="12">finished work coming back</text>
+
+    <rect class="f-worker" x="710" y="40" width="170" height="120" rx="10"/>
+    <text x="795" y="70" text-anchor="middle" class="b">Workers × W</text>
+    <text x="795" y="90" text-anchor="middle" class="muted" font-size="12">Python + NumPy</text>
+    <text x="795" y="108" text-anchor="middle" class="muted" font-size="11">each takes ONE task</text>
+    <text x="795" y="124" text-anchor="middle" class="muted" font-size="11">at a time (≤ 5 files)</text>
+    <text x="795" y="146" text-anchor="middle" class="muted" font-size="11">some fast, some slow</text>
+
+    <rect class="f-disk" x="690" y="250" width="150" height="74" rx="10"/>
+    <text x="765" y="278" text-anchor="middle" class="b">Shared folder</text>
+    <text x="765" y="298" text-anchor="middle" class="muted" font-size="12">/data  (.npy files)</text>
+    <text x="765" y="313" text-anchor="middle" class="muted" font-size="11">raw · partials · result</text>
+
+    <!-- arrows -->
+    <path class="arrow" marker-end="url(#ah)" d="M150,75 H198"/>
+    <path class="arrow" marker-end="url(#ah)" d="M370,68 H468"/>
+    <path class="arrow" marker-end="url(#ah)" d="M285,110 V228"/>
+    <path class="arrow" marker-end="url(#ah)" d="M640,93 H708"/>
+    <path class="arrow" marker-start="url(#ah)" marker-end="url(#ah)" d="M765,160 V248" />
+    <path class="arrow" marker-end="url(#ah)" d="M860,160 V462 H642"/>
+    <path class="arrow" marker-end="url(#ah)" d="M468,460 H372"/>
+    <path class="arrow" marker-start="url(#ah)" marker-end="url(#ah)" d="M285,318 V418"/>
+    <path class="arrow" marker-end="url(#ah)" d="M372,436 H415 V108 H468"/>
+
+    <!-- badges -->
+    <g><circle class="badge" cx="174" cy="62" r="11"/><text class="badge-t" x="174" y="66">1</text></g>
+    <g><circle class="badge" cx="300" cy="170" r="11"/><text class="badge-t" x="300" y="174">2</text></g>
+    <g><circle class="badge" cx="419" cy="54" r="11"/><text class="badge-t" x="419" y="58">3</text></g>
+    <g><circle class="badge" cx="674" cy="79" r="11"/><text class="badge-t" x="674" y="83">4</text></g>
+    <g><circle class="badge" cx="780" cy="205" r="11"/><text class="badge-t" x="780" y="209">5</text></g>
+    <g><circle class="badge" cx="860" cy="400" r="11"/><text class="badge-t" x="860" y="404">6</text></g>
+    <g><circle class="badge" cx="420" cy="448" r="11"/><text class="badge-t" x="420" y="452">7</text></g>
+    <g><circle class="badge" cx="300" cy="370" r="11"/><text class="badge-t" x="300" y="374">8</text></g>
+    <g><circle class="badge" cx="440" cy="250" r="11"/><text class="badge-t" x="440" y="254">9</text></g>
+  </svg>
+  </div>
+  <ol>
+    <li><b>You</b> create a job with <code>POST /jobs {F, C}</code> (from the dashboard or curl).</li>
+    <li>The <b>API</b> saves the job and its first tasks in <b>PostgreSQL</b> (one "generate files" task per 5 files).</li>
+    <li>The API puts the first few tasks on the <b>tasks queue</b>.</li>
+    <li>A free <b>worker</b> takes <b>one</b> task from the queue. (Idle workers simply wait here.)</li>
+    <li>The worker <b>reads and writes files</b> in the shared folder. Only file <i>paths</i> travel through the queue, never the numbers.</li>
+    <li>When done, the worker puts a small "task X finished, output is at path Y, count Z" message on the <b>results queue</b>.</li>
+    <li>The <b>Scheduler</b> reads that message.</li>
+    <li>It updates PostgreSQL: task done, the new output goes into the job's "basket" of items waiting to be combined, and the planner decides whether to create a combine task.</li>
+    <li>It publishes the next tasks onto the tasks queue (arrow 9), and the cycle repeats until the last combine task finishes. That one writes <code>result.csv</code>.</li>
+  </ol>
+  <p>The API never talks to workers directly, and workers never talk to each other. Everything goes through the queues, the database and the shared folder. That is why workers can come and go freely.</p>
+</section>
+
+<section id="life">
+  <h2>3. The life of one job (step by step in time)</h2>
+  <p>Same parts, now as a timeline. Each vertical line is one component; time flows downward.</p>
+  <div class="diagram"><div id="seq"></div></div>
+  <p><b>Why a loop?</b> A job with F=12 needs 3 generate tasks, then several combine tasks that only become possible after earlier results arrive. The scheduler creates each next task <i>when its inputs exist</i>, so the job unfolds as results come in.</p>
+</section>
+
+<section id="tree">
+  <h2>4. How the pieces get combined (F = 12 example)</h2>
+  <p>Each generate task makes up to 5 raw files. Each raw file is an <b>item</b> with count 1. The scheduler keeps a "basket" of items per job and combines up to 5 at a time as soon as they are ready.</p>
+  <div class="diagram">
+  <svg viewBox="0 0 800 500" role="img" aria-label="Combine tree for 12 files">
+    <defs><marker id="ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor" style="color:var(--text)"/></marker></defs>
+    <text x="14" y="16" class="muted b" font-size="12">Step 1</text>
+    <rect class="f-worker" x="36" y="26" width="288" height="34" rx="7"/><text x="180" y="48" text-anchor="middle" font-size="13">GENERATE task 1 · files 0–4</text>
+    <rect class="f-worker" x="336" y="26" width="288" height="34" rx="7"/><text x="480" y="48" text-anchor="middle" font-size="13">GENERATE task 2 · files 5–9</text>
+    <rect class="f-worker" x="632" y="26" width="120" height="34" rx="7"/><text x="692" y="48" text-anchor="middle" font-size="11.5">GENERATE 3 · 10–11</text>
+    <g id="raws"></g>
+    <text x="14" y="204" class="muted b" font-size="12">Step 2</text>
+    <rect class="f-sched" x="96" y="180" width="180" height="40" rx="7"/><text x="186" y="205" text-anchor="middle" font-size="13">COMBINE (5 inputs)</text>
+    <rect class="f-sched" x="396" y="180" width="180" height="40" rx="7"/><text x="486" y="205" text-anchor="middle" font-size="13">COMBINE (5 inputs)</text>
+    <rect class="f-disk" x="126" y="256" width="120" height="38" rx="7"/><text x="186" y="273" text-anchor="middle" font-size="12">partial P1</text><text x="186" y="288" text-anchor="middle" font-size="11" class="muted">count = 5</text>
+    <rect class="f-disk" x="426" y="256" width="120" height="38" rx="7"/><text x="486" y="273" text-anchor="middle" font-size="12">partial P2</text><text x="486" y="288" text-anchor="middle" font-size="11" class="muted">count = 5</text>
+    <path class="arrow" marker-end="url(#ah2)" d="M186,220 V254"/><path class="arrow" marker-end="url(#ah2)" d="M486,220 V254"/>
+    <text x="14" y="382" class="muted b" font-size="12">Step 3</text>
+    <rect class="f-api" x="230" y="352" width="340" height="52" rx="8"/>
+    <text x="400" y="375" text-anchor="middle" class="b" font-size="13">FINAL COMBINE (4 inputs: P1, P2, r10, r11)</text>
+    <text x="400" y="393" text-anchor="middle" font-size="12" class="muted">total count = 5 + 5 + 1 + 1 = 12 · divide sums by 12</text>
+    <path class="arrow" marker-end="url(#ah2)" d="M186,294 V325 H270 V350"/>
+    <path class="arrow" marker-end="url(#ah2)" d="M486,294 V350"/>
+    <path class="arrow" marker-end="url(#ah2)" d="M662,134 V325 H515 V350"/>
+    <path class="arrow" marker-end="url(#ah2)" d="M722,134 V337 H545 V350"/>
+    <path class="arrow" marker-end="url(#ah2)" d="M400,404 V440"/>
+    <rect class="f-user" x="300" y="442" width="200" height="38" rx="7"/><text x="400" y="466" text-anchor="middle" class="b" font-size="13">result.csv  (count = F ✔)</text>
+  </svg>
+  </div>
+  <ul>
+    <li><b>Step 1:</b> three generate tasks create the 12 raw files (5 + 5 + 2). Each file is an item with count 1.</li>
+    <li><b>Step 2:</b> as soon as 5 items are ready, a combine task adds them index by index into a partial result (sums, count 5). This starts while other files are still being generated.</li>
+    <li><b>Step 3:</b> when all 12 files exist, nothing else is running, and everything left fits in one task, the <b>final</b> task takes the rest (P1, P2, r10, r11), adds them (count 12) and divides once.</li>
+  </ul>
+  <p>The exact grouping depends on timing (which result arrives first), but <b>the answer is always identical</b>, because adding sums and counts is order-independent. The scheduler checks that the final count equals F; if not, the job fails instead of returning a wrong answer.</p>
+  <h3>Why not wait for all files, then combine?</h3>
+  <p>Combining starts while other files are still being generated, so workers are rarely idle. A fast worker never waits for a slow one: it just takes the next ready task.</p>
+</section>
+
+<section id="docker">
+  <h2>5. Docker: what is really running on your machine</h2>
+  <p>You normally would have to install PostgreSQL, RabbitMQ, Node and Python with the right versions and wire them together. <b>Docker</b> packages each program with everything it needs, so one command starts the whole system the same way on any machine.</p>
+
+  <h3>Four words to know</h3>
+  <div class="scroll"><table>
+    <tr><th>Word</th><th>Meaning</th><th>In this project</th></tr>
+    <tr><td><b>Image</b></td><td>A read-only package: a program plus everything it needs. Like an installer or a blueprint.</td><td><code>postgres:16</code>, <code>rabbitmq:3-management</code> (downloaded), and two we build: the API image and the worker image</td></tr>
+    <tr><td><b>Container</b></td><td>A running copy of an image, isolated like a tiny separate computer. Start and delete freely.</td><td>5 containers: postgres, rabbitmq, api, scheduler, workers</td></tr>
+    <tr><td><b>Dockerfile</b></td><td>The recipe that builds an image.</td><td><code>api/Dockerfile</code> and <code>worker/Dockerfile</code></td></tr>
+    <tr><td><b>Compose</b></td><td>One file that describes <i>all</i> containers and how they connect. <code>docker compose up</code> starts everything.</td><td><code>docker-compose.yml</code></td></tr>
+  </table></div>
+
+  <h3>What is running when you type <code>docker compose up</code></h3>
+  <div class="diagram">
+  <svg viewBox="0 0 900 470" role="img" aria-label="Docker layout">
+    <defs><marker id="ah3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor" style="color:var(--text)"/></marker></defs>
+    <rect class="area" x="8" y="8" width="884" height="454" rx="14"/>
+    <text x="24" y="30" class="b" font-size="13">Your Windows PC</text>
+    <rect class="area" x="28" y="44" width="844" height="296" rx="12"/>
+    <text x="44" y="66" class="muted" font-size="12">Docker Desktop: runs a small hidden Linux machine (WSL2). Containers are Linux, which is why Linux-only features like the memory cap work.</text>
+    <rect class="area" x="44" y="112" width="812" height="150" rx="10"/>
+    <text x="56" y="257" class="muted" font-size="11">private network "distributedmean_default": containers find each other by service NAME (e.g. host "postgres", host "rabbitmq")</text>
+
+    <rect class="f-db" x="60" y="146" width="136" height="100" rx="9"/><text x="128" y="172" text-anchor="middle" class="b" font-size="13">postgres</text><text x="128" y="190" text-anchor="middle" class="muted" font-size="11">image: postgres:16</text><text x="128" y="206" text-anchor="middle" class="muted" font-size="11">the database</text>
+    <rect class="f-mq" x="216" y="146" width="136" height="100" rx="9"/><text x="284" y="172" text-anchor="middle" class="b" font-size="13">rabbitmq</text><text x="284" y="190" text-anchor="middle" class="muted" font-size="11">image: rabbitmq:3</text><text x="284" y="206" text-anchor="middle" class="muted" font-size="11">the queues</text>
+    <rect class="f-api" x="372" y="146" width="136" height="100" rx="9"/><text x="440" y="172" text-anchor="middle" class="b" font-size="13">api</text><text x="440" y="190" text-anchor="middle" class="muted" font-size="11">built from ./api</text><text x="440" y="206" text-anchor="middle" class="muted" font-size="11">node dist/server.js</text>
+    <rect class="f-sched" x="528" y="146" width="136" height="100" rx="9"/><text x="596" y="172" text-anchor="middle" class="b" font-size="13">scheduler</text><text x="596" y="190" text-anchor="middle" class="muted" font-size="11">built from ./api</text><text x="596" y="206" text-anchor="middle" class="muted" font-size="11">node dist/scheduler.js</text>
+    <rect class="f-worker" x="684" y="146" width="156" height="100" rx="9"/><text x="762" y="172" text-anchor="middle" class="b" font-size="13">workers</text><text x="762" y="190" text-anchor="middle" class="muted" font-size="11">built from ./worker</text><text x="762" y="206" text-anchor="middle" class="muted" font-size="11">python manager.py</text><text x="762" y="222" text-anchor="middle" class="muted" font-size="11">runs W worker processes</text>
+
+    <!-- ports -->
+    <path class="arrow" marker-end="url(#ah3)" d="M128,96 V144"/>
+    <text x="128" y="88" text-anchor="middle" font-size="11" class="b">localhost:5432</text>
+    <path class="arrow" marker-end="url(#ah3)" d="M284,96 V144"/>
+    <text x="284" y="88" text-anchor="middle" font-size="11" class="b">localhost:15672 (UI)</text>
+    <path class="arrow" marker-end="url(#ah3)" d="M440,96 V144"/>
+    <text x="440" y="88" text-anchor="middle" font-size="11" class="b">localhost:3000</text>
+
+    <!-- volumes -->
+    <rect class="f-disk" x="60" y="372" width="196" height="64" rx="9"/><text x="158" y="396" text-anchor="middle" class="b" font-size="13">pgdata (Docker volume)</text><text x="158" y="414" text-anchor="middle" class="muted" font-size="11">database files · deleted by "down -v"</text>
+    <rect class="f-disk" x="400" y="372" width="440" height="64" rx="9"/><text x="620" y="396" text-anchor="middle" class="b" font-size="13">./data folder on YOUR disk</text><text x="620" y="414" text-anchor="middle" class="muted" font-size="11">seen as /data by api, scheduler and workers · the shared pantry</text>
+    <path class="arrow" marker-start="url(#ah3)" marker-end="url(#ah3)" d="M128,248 V370"/>
+    <path class="arrow" marker-start="url(#ah3)" marker-end="url(#ah3)" d="M440,248 V370"/>
+    <path class="arrow" marker-start="url(#ah3)" marker-end="url(#ah3)" d="M596,248 V370"/>
+    <path class="arrow" marker-start="url(#ah3)" marker-end="url(#ah3)" d="M762,248 V370"/>
+  </svg>
+  </div>
+
+  <h3>The four things Docker does for us</h3>
+  <div class="grid2">
+    <div>
+      <p><b>1. Builds our two images</b> from a Dockerfile (a recipe):</p>
+<pre><code># api/Dockerfile
+FROM node:20-slim          # start from a ready-made Node image
+WORKDIR /app               # work inside /app
+COPY package.json package-lock.json ./
+RUN npm ci                 # install dependencies
+COPY tsconfig.json ./
+COPY src ./src
+RUN npm run build          # compile TypeScript to dist/
+COPY public ./public       # the dashboard page</code></pre>
+      <p>The <b>scheduler</b> reuses the <i>same image</i> as the API but runs a different command. Same code, two entry points.</p>
+    </div>
+    <div>
+      <p><b>2. Starts everything and wires it up</b> (<code>docker-compose.yml</code>):</p>
+<pre><code>api:
+  build: ./api
+  command: node dist/server.js
+  ports: ["3000:3000"]
+  environment:
+    DATABASE_URL: postgres://app:app@postgres:5432/jobs
+    RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+    DATA_DIR: /data
+  volumes: ["./data:/data"]
+  depends_on:
+    postgres: { condition: service_healthy }
+    rabbitmq: { condition: service_healthy }</code></pre>
+    </div>
+  </div>
+  <ul>
+    <li><b><code>ports: "3000:3000"</code></b> means <i>your PC's port : container's port</i>. This is why <code>http://localhost:3000</code> reaches the API running inside its container.</li>
+    <li><b>The network:</b> inside Docker, the API reaches the database at the hostname <code>postgres</code> and the queue at <code>rabbitmq</code>, using the service names from the compose file.</li>
+    <li><b><code>environment</code></b> passes settings (URLs, passwords, limits) into containers, so the code has no hard-coded addresses.</li>
+    <li><b><code>volumes: "./data:/data"</code></b> maps a folder on your disk into the container. Containers are throw-away, but files written to <code>/data</code> land in <code>E:\Distributed Mean\data</code>. All three code containers share it, which is how workers hand files to each other.</li>
+    <li><b><code>depends_on</code> + healthcheck</b> make Compose wait until Postgres and RabbitMQ are ready before starting the code that needs them. (RabbitMQ can report healthy slightly before it accepts connections, so our code also retries.)</li>
+    <li><b>Why one "workers" container but many workers?</b> <code>worker_manager.py</code> starts W worker <i>processes</i> inside it and changes W when you call <code>PUT /workers</code>. That avoids giving the API control over Docker itself.</li>
+  </ul>
+
+  <h3>Commands you will actually use</h3>
+  <div class="scroll"><table>
+    <tr><th>Command</th><th>What it does</th></tr>
+    <tr><td><code>docker compose up --build</code></td><td>Build the images and start all 5 containers (logs in your terminal; Ctrl+C stops)</td></tr>
+    <tr><td><code>docker compose up -d --build</code></td><td>Same, but in the background</td></tr>
+    <tr><td><code>docker compose ps</code></td><td>List the containers and whether they are running</td></tr>
+    <tr><td><code>docker compose logs -f workers</code></td><td>Watch one container's output (try <code>api</code>, <code>scheduler</code>)</td></tr>
+    <tr><td><code>docker compose exec workers python verify.py &lt;jobId&gt;</code></td><td>Run a command <i>inside</i> a running container</td></tr>
+    <tr><td><code>docker compose restart scheduler</code></td><td>Restart one container</td></tr>
+    <tr><td><code>docker compose down</code></td><td>Stop and remove the containers (database data is kept)</td></tr>
+    <tr><td><code>docker compose down -v</code></td><td>Same, and also delete the database volume (a fresh start)</td></tr>
+  </table></div>
+  <div class="callout"><b>What survives what:</b> stopping containers keeps the database (volume <code>pgdata</code>) and your <code>./data</code> files. <code>down -v</code> deletes the database but not <code>./data</code>. Delete the <code>./data</code> folder's contents yourself to reclaim disk space (it can get large).</div>
+</section>
+
+<section id="states">
+  <h2>6. Statuses: what the database tracks</h2>
+  <p>Everything the system "knows" is in a few PostgreSQL tables. The workers do not decide anything; they only run tasks. The scheduler moves things between statuses.</p>
+  <div class="scroll"><table>
+    <tr><th>Thing</th><th>Statuses and how they change</th></tr>
+    <tr><td><b>Job</b> (<code>jobs</code>)</td><td>
+      <div class="chips"><span class="chip">PENDING</span><span class="chip arrow">→ first result arrives →</span><span class="chip">RUNNING</span><span class="chip arrow">→</span><span class="chip">COMPLETED</span></div>
+      <div class="chips">or <span class="chip">FAILED</span> (a task failed 3 times, or final count ≠ F) · <span class="chip">CANCELLED</span> (user cancelled)</div></td></tr>
+    <tr><td><b>Task</b> (<code>tasks</code>)</td><td>
+      <div class="chips"><span class="chip">PENDING</span><span class="chip arrow">→ published to the queue →</span><span class="chip">QUEUED</span><span class="chip arrow">→ result DONE →</span><span class="chip">DONE</span></div>
+      <div class="chips">A failed result with attempts left sends it back to <span class="chip">PENDING</span> (retry). After 3 failures, or a cancel, it becomes <span class="chip">FAILED</span>.</div></td></tr>
+    <tr><td><b>Item</b> (<code>items</code>, the "basket")</td><td><div class="chips"><span class="chip">READY</span><span class="chip arrow">→ taken by a combine task →</span><span class="chip">USED</span></div></td></tr>
+    <tr><td><b>Worker</b> (<code>workers</code>)</td><td><div class="chips"><span class="chip">IDLE</span> ⇄ <span class="chip">BUSY</span> · <span class="chip">DRAINING</span> (finishing its task, then exiting) · <span class="chip">DEAD</span> (no heartbeat for 10 s)</div></td></tr>
+  </table></div>
+  <p>Why PENDING and QUEUED are separate: a big job can have thousands of tasks. Only a small number are placed on the queue at a time (about 2 × W) so a huge job cannot block small jobs. The rest wait as PENDING in the database.</p>
+</section>
+
+<!-- ============================ PART B ============================ -->
+<div class="part">Part B: the low-level code</div>
+
+<section id="codemap">
+  <h2>7. Where each box lives in the code</h2>
+  <div class="scroll"><table>
+    <tr><th>Box</th><th>Files</th><th>Job</th></tr>
+    <tr><td><span class="tag t-api">API</span></td><td><code>api/src/server.ts</code> · <code>http/jobs-routes.ts</code> · <code>http/workers-routes.ts</code> · <code>http/stats-routes.ts</code> · <code>public/index.html</code></td><td>HTTP endpoints, validation, the dashboard</td></tr>
+    <tr><td><span class="tag t-mq">Queue helper</span></td><td><code>api/src/queue.ts</code> · <code>services/task-dispatcher.ts</code></td><td>Publish to RabbitMQ, <code>publishPendingTasks()</code> = decide which tasks go on the queue</td></tr>
+    <tr><td><span class="tag t-sched">Scheduler</span></td><td><code>api/src/scheduler.ts</code> · <code>services/result-handler.ts</code> · <code>services/combine-planner.ts</code> · <code>services/worker-health.ts / straggler-backups.ts</code></td><td>Consume results, update the DB, plan combines, dead workers, backups</td></tr>
+    <tr><td><span class="tag t-worker">Workers</span></td><td><code>worker/worker_manager.py</code> · <code>worker.py</code> · <code>computation.py</code> · <code>file_storage.py</code></td><td>Keep W processes alive; pull a task, compute, report</td></tr>
+    <tr><td><span class="tag t-db">Database</span></td><td><code>db/schema.sql</code> · <code>api/src/db.ts</code></td><td>Tables and the transaction helper</td></tr>
+  </table></div>
+  <p>Two things are shared by everyone: the <b>message format</b> (a task message and a result message, both small JSON) and the <b>5-input limit</b>.</p>
+<pre><code>// a task message (API/scheduler → worker)
+{ "taskId": "…", "jobId": "…", "type": "GENERATE" | "COMBINE", "c": 5000,
+  "attempt": 1, "isFinal": false, "isBackup": false,
+  "fileIndexes": [0,1,2,3,4],                           // GENERATE
+  "inputs": [{ "path": "…/raw/00000.npy", "count": 1 }] // COMBINE (1 to 5)
+}
+// a result message (worker → scheduler)
+{ "taskId": "…", "workerId": "workers-1", "status": "DONE" | "FAILED" | "SKIPPED",
+  "outputs": [{ "path": "…/partials/….npy", "count": 5 }], "durationMs": 120, "error": null }</code></pre>
+</section>
+
+<section id="code1">
+  <h2>8. Creating a job: <code>POST /jobs</code> and <code>publishPendingTasks()</code></h2>
+  <p>Goal: validate, save the job and <i>all</i> its generate tasks in the database in one transaction, then put only the first few on the queue.</p>
+  <h3>Step 1: validate and insert (one transaction)</h3>
+<pre><code>// api/src/routes/jobs.ts
+if (!isInt(F) || F &lt;= 1 || F &gt;= 100000) return res.status(400).json({ error: "F must be …" });
+if (!isInt(C) || C &lt;= 1 || C &gt;= 1000000) return res.status(400).json({ error: "C must be …" });
+
+const jobId = await withTransaction(async (client) =&gt; {
+  const job = await client.query("INSERT INTO jobs (f, c) VALUES ($1, $2) RETURNING id", [F, C]);
+  // ONE sql statement creates ceil(F/5) GENERATE tasks, each with up to 5 file indexes
+  await client.query(
+    `INSERT INTO tasks (job_id, type, payload)
+     SELECT $1, 'GENERATE',
+            jsonb_build_object('fileIndexes',
+              (SELECT jsonb_agg(i) FROM generate_series(g * $3, LEAST(g * $3 + $3 - 1, $2 - 1)) AS i))
+     FROM generate_series(0, ceil($2::numeric / $3)::int - 1) AS g`, [id, F, 5]);
+  …
+});
+await publishPendingTasks();                      // publish the first batch
+res.status(202).json({ jobId });</code></pre>
+  <p>For F = 12 this makes three rows: files <code>[0..4]</code>, <code>[5..9]</code>, <code>[10,11]</code>. All start as <code>PENDING</code>. A transaction means either the job <i>and</i> all its tasks exist, or nothing does.</p>
+
+  <h3>Step 2: <code>publishPendingTasks()</code> publishes a few tasks, fairly</h3>
+<pre><code>// api/src/dispatch.ts
+const target = Math.max(2, 2 * fleet.desired);        // keep the queue shallow: about 2 × W waiting
+const slots  = target - fleet.waitingInQueue;         // how many more we may publish
+if (slots &lt;= 0) return 0;
+
+// round-robin: 1st pending task of every job, then 2nd of every job, …
+… ROW_NUMBER() OVER (PARTITION BY t.job_id ORDER BY t.created_at) AS rn …
+   ORDER BY rn, job_created LIMIT $1
+   FOR UPDATE OF t SKIP LOCKED
+
+for (const t of rows) {
+  await publish(TASKS_QUEUE, taskMessage(t, attempt));  // 1) publish and WAIT for the broker's confirm
+  await client.query(`UPDATE tasks SET status = 'QUEUED', attempts = $2 …`);  // 2) only then mark QUEUED
+}</code></pre>
+  <ul>
+    <li><b>Shallow queue:</b> a 100,000-file job does not dump 20,000 tasks on the queue. If it did, a small job submitted later would wait behind them all.</li>
+    <li><b>Round-robin:</b> with two jobs, tasks alternate between them. That is why a small job submitted after a big one finishes quickly.</li>
+    <li><b>Publish first, mark second:</b> if the program crashes in between, the task is still <code>PENDING</code> and gets published again later. A duplicate is harmless. The opposite order could leave a task marked QUEUED that is not on the queue at all, and it would be stuck forever.</li>
+    <li><code>SKIP LOCKED</code> plus an in-process lock stop the API and the scheduler from publishing the same task at the same moment.</li>
+  </ul>
+</section>
+
+<section id="code2">
+  <h2>9. The worker: pull one task, compute, report</h2>
+  <p>One worker is a Python process. <code>worker_manager.py</code> keeps W of them running (restarts any that crash).</p>
+<pre><code># worker/worker.py (simplified)
+ch.basic_qos(prefetch_count=1)            # RabbitMQ hands me ONE task at a time
+for method, _props, body in ch.consume("tasks", inactivity_timeout=1):
+    task = json.loads(body)
+    signal.pthread_sigmask(signal.SIG_BLOCK, {signal.SIGTERM})   # don't get interrupted mid-write
+
+    set status BUSY in the workers table
+    if the job is CANCELLED or FAILED:  report SKIPPED
+    elif more than 5 inputs:            report FAILED "fan-in &gt; 5"
+    else:
+        try:
+            if task["type"] == "GENERATE": outputs = compute.generate_files(…)
+            else:                           outputs = compute.combine(…)
+            status = "DONE"
+        except Exception as e:
+            outputs, status, error = [], "FAILED", str(e)
+        if slowdown &gt; 1: time.sleep((slowdown - 1) * elapsed)    # demo: pretend to be slow
+        report(task, status, outputs, …)                          # publish result, wait for confirm
+
+    ch.basic_ack(method.delivery_tag)       # ONLY NOW tell RabbitMQ the task is finished
+    signal.pthread_sigmask(signal.SIG_UNBLOCK, {signal.SIGTERM})
+    set status IDLE</code></pre>
+  <h3>Why it is written this way</h3>
+  <ul>
+    <li><b><code>prefetch = 1</code> is the whole load-balancing algorithm.</b> A worker asks for a new task only when it finishes the last one. A fast worker finishes more tasks and so takes more. No central "assign work to worker 3" logic is needed. (In our test the 3×-slower worker completed 248 tasks while each fast worker completed about 555, so it did roughly 45% as many.)</li>
+    <li><b>Ack after reporting.</b> If the worker dies mid-task, the task was never acked, so RabbitMQ hands it to another worker. Nothing is lost.</li>
+    <li><b>The worker is stateless.</b> It never writes tasks or items. It only runs a task and reports. All decisions live in the scheduler, so there are no races between workers.</li>
+    <li><b>5-file limit, in layers:</b> the scheduler never creates a task with more than 5 inputs; the worker refuses one; <code>combine()</code> loads one file at a time into a running total; and each worker process has a 512 MB memory cap (<code>RLIMIT_AS</code>) so a bug cannot silently use more.</li>
+    <li><b>Heartbeat thread:</b> every 2 s the worker updates <code>last_seen</code> in the database. The scheduler marks a worker <code>DEAD</code> after 10 s of silence.</li>
+  </ul>
+</section>
+
+<section id="code3">
+  <h2>10. The scheduler: handling one result</h2>
+  <p>The scheduler listens to the results queue and handles <b>one result at a time</b>, each in a single database transaction.</p>
+<pre><code>// api/src/scheduler.ts
+channel.consume(RESULTS_QUEUE, (raw) =&gt; {
+  chain = chain.then(async () =&gt; {
+    await applyWorkerResult(JSON.parse(raw.content.toString()));   // all DB changes, one transaction
+    channel.ack(raw);                                         // ack ONLY after the commit
+    await publishPendingTasks();                                           // top up the task queue
+  });
+});</code></pre>
+<pre><code>// api/src/results.ts: applyWorkerResult (the important branches)
+lock the task row; if it is already DONE        → "duplicate ignored", stop
+lock the job row; if job cancelled/failed       → mark task FAILED "job not active", stop
+
+if result is FAILED:
+    attempts &gt;= 3 ? mark task + job FAILED : set task back to PENDING (it will be re-published)
+
+mark task DONE; job PENDING → RUNNING
+if GENERATE:         insert each output as a READY item; files_generated += n
+else if final task:  count == F ? job COMPLETED (result_path set) : job FAILED "count mismatch"
+else (combine):      insert the partial as a READY item
+
+if job still RUNNING: planCombineTasks(…)      // maybe create the next COMBINE task
+write an event line (shown in the dashboard log)</code></pre>
+  <ul>
+    <li><b>One transaction</b> = a crash can never leave "task marked done but item not saved". Either all of it happened or none.</li>
+    <li><b>Commit, then ack.</b> If the scheduler dies after committing but before acking, the same result is redelivered. Step 1 notices the task is already <code>DONE</code> and ignores it. This "at least once delivery + idempotent handling" pattern is what makes every failure safe.</li>
+    <li><b>Unique output paths</b> (<code>ON CONFLICT (path) DO NOTHING</code>) mean a duplicated result cannot add the same file to the basket twice.</li>
+    <li>There is exactly <b>one scheduler</b>, so only one component ever changes the basket. That removes the whole class of "two workers grabbed the same files" bugs.</li>
+  </ul>
+</section>
+
+<section id="code4">
+  <h2>11. The planner: when to combine</h2>
+  <p>After every result, <code>planCombineTasks()</code> looks at the job's basket (READY items) and decides whether to create COMBINE tasks. Four rules, tried in order:</p>
+<pre><code>// api/src/planner.ts (the loop)
+for (;;) {
+  if (ready.length &gt;= 5) {                         // Rule 1: a full group of 5
+    take = first 5
+    isFinal = (nothing left in basket) &amp;&amp; inFlight == 0 &amp;&amp; allFilesGenerated
+    createCombine(take, isFinal); continue;
+  }
+  if (ready.length &gt;= 2 &amp;&amp; inFlight == 0 &amp;&amp; allGenerated) {   // Rule 2: nothing else can arrive
+    createCombine(all ready, final = true); break;
+  }
+  if (ready.length &gt;= 2 &amp;&amp; fleetIdle) {                       // Rule 3: a worker is idle, don't let it sit
+    createCombine(all ready, final = false); break;
+  }
+  if (ready.length == 1 &amp;&amp; inFlight == 0 &amp;&amp; allGenerated) {   // Rule 4: only a divide is left
+    createCombine([the one item], final = true); break;
+  }
+  break;                                              // otherwise: wait for more items
+}</code></pre>
+  <div class="scroll"><table>
+    <tr><th>Rule</th><th>Plain English</th><th>Why</th></tr>
+    <tr><td>1</td><td>5 items ready → combine 5</td><td>5 is the biggest allowed, so it needs the fewest tasks</td></tr>
+    <tr><td>2</td><td>2+ ready, nothing running, all files exist → FINAL task with everything</td><td>This is how the system <b>knows the job is finished</b></td></tr>
+    <tr><td>3</td><td>2+ ready and a worker is idle with an empty queue → combine what is there</td><td>No idle time while waiting for a "full" group of 5</td></tr>
+    <tr><td>4</td><td>Exactly 1 item left and nothing else coming → a final task with one input</td><td>The mean still needs the divide step</td></tr>
+  </table></div>
+  <p><b>The final task is only created when</b> everything left fits in it (≤ 5), <b>nothing is in flight</b>, and <b>every file has been generated</b>. Then <code>count == F</code> is checked as a safety net. I tested this planner with 920 randomized simulations (random speeds and completion orders) plus 7 scenarios against the real database.</p>
+  <p>The scheduler also re-runs the planner every 500 ms (the "tick"), so Rule 3 fires as soon as a worker becomes idle, even if no result happened to arrive at that moment.</p>
+</section>
+
+<section id="code5">
+  <h2>12. When things go wrong</h2>
+  <div class="scroll"><table>
+    <tr><th>Situation</th><th>What happens</th><th>Code</th></tr>
+    <tr><td>A worker crashes mid-task</td><td>The task was never acked, so RabbitMQ redelivers it to another worker. The manager restarts the crashed one. The final result is still correct (tested with <code>kill -9</code>).</td><td><code>worker.py</code> ack order</td></tr>
+    <tr><td>A worker hangs (no heartbeat for 10 s)</td><td>Marked <code>DEAD</code> and an event is logged. It returns to IDLE when heartbeats resume.</td><td><code>services/worker-health.ts / straggler-backups.ts</code> <code>markDeadWorkers</code></td></tr>
+    <tr><td>A task fails (an error)</td><td>The worker reports FAILED. The scheduler retries up to 3 times, then fails the job with the error message.</td><td><code>services/result-handler.ts</code></td></tr>
+    <tr><td>The same result arrives twice</td><td>The second is ignored because the task is already <code>DONE</code>.</td><td><code>services/result-handler.ts</code></td></tr>
+    <tr><td>The scheduler restarts</td><td>Unacked results are redelivered, and all state is in PostgreSQL, so nothing is lost.</td><td>commit-then-ack</td></tr>
+    <tr><td>A user cancels a job</td><td>Job → CANCELLED. Its PENDING tasks → FAILED "cancelled". Tasks already on the queue come back as SKIPPED, late results are ignored, and the queue slots go to other jobs.</td><td><code>http/jobs-routes.ts</code> DELETE</td></tr>
+    <tr><td>One worker is very slow</td><td>When a worker is idle and the queue is empty, the scheduler publishes a <b>backup copy</b> of a task that has run over 2× the median time. The first result wins and the second is ignored.</td><td><code>services/worker-health.ts / straggler-backups.ts</code> <code>publishStragglerBackups</code></td></tr>
+    <tr><td>You scale W down mid-job</td><td>The manager sends SIGTERM. The worker finishes its current task, then exits ("draining"). No task is interrupted.</td><td><code>worker_manager.py</code>, <code>worker.py</code></td></tr>
+  </table></div>
+  <div class="callout good"><b>The three layers that make duplicates and crashes safe:</b> (1) results for already-DONE tasks are ignored, (2) every output path is unique per task and enforced by the database, (3) the final count must equal F. A task may run twice, but it can never be counted twice.</div>
+</section>
+
+<p class="lead" style="margin-top:28px">Where to go next: <code>docs/walkthrough/01-core-idea.md</code> goes deeper into <code>computation.py</code>, and <code>docs/test-results.md</code> lists every test that was run against these behaviours.</p>
+</main>
+
+<script>
+// ---- Sequence diagram: built from data so the coordinates stay consistent ----
+(function () {
+  const lanes = [
+    ["You", "browser / curl", "user"], ["API", "Express :3000", "api"], ["PostgreSQL", "jobs · tasks · items", "db"],
+    ["RabbitMQ", "tasks · results", "mq"], ["Worker", "Python × W", "worker"], ["Scheduler", "TypeScript", "sched"],
+  ];
+  // [from, to, label]; from === to draws a note on the lane
+  const steps = [
+    [0, 1, "POST /jobs  {F:12, C:100}"],
+    [1, 2, "save job + 3 GENERATE tasks"],
+    [1, 3, "publish first tasks (mark QUEUED)"],
+    [1, 0, "202 {jobId}"],
+    [3, 4, "worker pulls ONE task"],
+    [4, 4, "compute (files in /data)"],
+    [4, 3, "publish result (DONE + output paths)"],
+    [3, 5, "scheduler receives the result"],
+    [5, 2, "task DONE, save items, planner adds tasks"],
+    [5, 3, "publish next tasks (publishPendingTasks)"],
+    [5, 2, "final task done → job COMPLETED"],
+    [0, 1, "GET /jobs/:id/result  → CSV"],
+  ];
+  const loopFrom = 4, loopTo = 9;
+  const W = 900, left = 80, gap = 148, top = 96, row = 46;
+  const H = top + steps.length * row + 30;
+  const x = (i) => left + i * gap;
+  const ns = "http://www.w3.org/2000/svg";
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Life of a job">
+    <defs><marker id="ah4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor" style="color:var(--text)"/></marker></defs>`;
+  const cls = { user: "f-user", api: "f-api", db: "f-db", mq: "f-mq", worker: "f-worker", sched: "f-sched" };
+  lanes.forEach(([name, sub, k], i) => {
+    s += `<line x1="${x(i)}" y1="${top - 14}" x2="${x(i)}" y2="${H - 10}" stroke="var(--line2)" stroke-dasharray="4 4"/>`;
+    s += `<rect class="${cls[k]}" x="${x(i) - 62}" y="14" width="124" height="52" rx="8"/>`;
+    s += `<text x="${x(i)}" y="38" text-anchor="middle" class="b" font-size="13">${name}</text>`;
+    s += `<text x="${x(i)}" y="56" text-anchor="middle" class="muted" font-size="11">${sub}</text>`;
+  });
+  // loop bracket
+  const ly1 = top + loopFrom * row - 20, ly2 = top + loopTo * row + 20;
+  s += `<rect x="${x(1) + 24}" y="${ly1}" width="${x(5) + 56 - (x(1) + 24)}" height="${ly2 - ly1}" fill="none" stroke="var(--accent)" stroke-width="1.3" stroke-dasharray="6 4" rx="8"/>`;
+  s += `<text x="${x(1) + 34}" y="${ly1 + 14}" font-size="11" fill="var(--accent)" style="fill:var(--accent)">repeat until the final task finishes</text>`;
+  steps.forEach(([a, b, label], i) => {
+    const y = top + i * row;
+    s += `<circle class="badge" cx="${Math.min(x(a), x(b)) - 0}" cy="${y}" r="0"/>`;
+    if (a === b) {
+      s += `<rect class="f-worker" x="${x(a) - 82}" y="${y - 14}" width="164" height="28" rx="6"/>`;
+      s += `<text x="${x(a)}" y="${y + 4}" text-anchor="middle" font-size="11.5">${i + 1} · ${label}</text>`;
+    } else {
+      const x1 = x(a), x2 = x(b), dir = x2 > x1 ? 1 : -1;
+      s += `<path class="arrow" marker-end="url(#ah4)" d="M${x1},${y} H${x2 - dir * 2}"/>`;
+      s += `<text class="halo" x="${(x1 + x2) / 2}" y="${y - 7}" text-anchor="middle" font-size="12">${i + 1} · ${label}</text>`;
+    }
+  });
+  s += "</svg>";
+  document.getElementById("seq").innerHTML = s;
+
+  // ---- raw file squares for the combine tree diagram ----
+  let g = "";
+  for (let i = 0; i < 12; i++) {
+    const rx = 40 + i * 60;
+    g += `<path d="M${rx + 22},60 V90" stroke="var(--line2)" fill="none"/>`;
+    g += `<rect class="box" x="${rx}" y="90" width="44" height="40" rx="6"/>`;
+    g += `<text x="${rx + 22}" y="108" text-anchor="middle" font-size="12" class="b">r${i}</text>`;
+    g += `<text x="${rx + 22}" y="123" text-anchor="middle" font-size="10" class="muted">count 1</text>`;
+  }
+  // lines from raw files into the two combine tasks
+  for (let i = 0; i < 5; i++) g += `<path d="M${62 + i * 60},130 L186,180" stroke="var(--line2)" fill="none"/>`;
+  for (let i = 5; i < 10; i++) g += `<path d="M${62 + i * 60},130 L486,180" stroke="var(--line2)" fill="none"/>`;
+  document.getElementById("raws").innerHTML = g;
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,502 @@
+# Implementation Notes
+
+**Audience:** the engineer (or Claude) implementing the system.
+**Read first:** `01-design-document.md` (what and why), `03-decision-notes.md` (reasoning). This file says exactly **how** to build it.
+**Companion files:** `schema.sql` (database), `docker-compose.yml` (local run), `bench/simulate.py` (scheduling benchmark), `bench/planner_check.py` (reference model of the basket rules, randomized test), `02-requirements-checklist.md` (tick off as you build).
+
+---
+
+## 0. Rules for the implementer
+
+These are the core of the design. Do not change them without flagging it.
+
+1. **Never average averages.** Every item is a list of C per-position **sums** plus one **count**. Divide only in the final task.
+2. **Position = array index.** Every raw file, partial and result is a 1-D array of length C in position order. Combining is element-wise addition (`acc += arr`).
+3. **No task has more than 5 inputs** (`MAX_FAN_IN = 5`). This applies to GENERATE (≤ 5 files) and COMBINE (≤ 5 items).
+4. **Workers are stateless.** They never read or write `tasks` or `items`. They only read `jobs.status` and write their own `workers` row.
+5. **Only the scheduler writes `tasks` and `items`** (except the API, which inserts a new job's GENERATE tasks).
+6. **At-least-once + idempotent.** Any message may be processed twice; the second time must be harmless.
+7. **Final count must equal F**, otherwise the job is `FAILED`.
+8. Keep it simple. Prefer clear code over clever code. One scheduler instance only.
+
+---
+
+## 1. Tech stack
+
+| Part | Technology |
+|---|---|
+| API + scheduler | Node.js 20, TypeScript 5, Express 4, `pg`, `amqplib` |
+| Workers | Python 3.11, `numpy`, `pika`, `psycopg[binary]` (v3) |
+| Database | PostgreSQL 16 |
+| Queue | RabbitMQ 3 (management image) |
+| Run | Docker Compose |
+| UI | One static HTML page with vanilla JS, served by the API |
+
+**Dependencies**
+
+| Service | Packages |
+|---|---|
+| `api/package.json` | `express`, `pg`, `amqplib`; dev: `typescript`, `@types/node`, `@types/express`, `@types/pg`, `@types/amqplib` |
+| `worker/requirements.txt` | `numpy`, `pika`, `psycopg[binary]`, `pytest` |
+
+**Dockerfiles**
+
+- `api/Dockerfile`: `node:20-slim`, `npm ci`, `npm run build` (runs `tsc` to `dist/`), copy `public/`. The command comes from docker-compose (`node dist/server.js` or `node dist/scheduler.js`).
+- `worker/Dockerfile`: `python:3.11-slim`, `pip install -r requirements.txt`, copy the worker folder to `/app`, workdir `/app`.
+
+---
+
+## 2. Repository layout
+
+```
+.
+├── docker-compose.yml
+├── README.md
+├── db/
+│   └── schema.sql
+├── api/                         # TypeScript: API + scheduler (two entry points)
+│   ├── Dockerfile
+│   ├── package.json
+│   ├── tsconfig.json
+│   ├── public/
+│   │   └── index.html           # dashboard
+│   └── src/
+│       ├── server.ts            # Express app (entry point 1)
+│       ├── scheduler.ts         # results consumer + tick loop (entry point 2)
+│       ├── config.ts            # env vars
+│       ├── db.ts                # pg Pool + withTransaction helper
+│       ├── queue.ts             # amqplib connection, confirm channel, publish helpers
+│       ├── dispatch.ts          # refill(): publish PENDING tasks round-robin (shared by API + scheduler)
+│       ├── planner.ts           # basket rules: planJob(jobId)
+│       ├── results.ts           # handleResult(msg)
+│       ├── maintenance.ts       # dead workers, backups
+│       ├── events.ts            # logEvent(jobId, message)
+│       └── routes/
+│           ├── jobs.ts
+│           ├── workers.ts
+│           └── stats.ts
+├── worker/                      # Python
+│   ├── Dockerfile
+│   ├── requirements.txt
+│   ├── manager.py               # keeps W worker processes alive (entry point)
+│   ├── worker.py                # one worker process: consume, compute, report
+│   ├── compute.py               # generate_files(), combine() — pure functions, unit tested
+│   ├── storage.py               # paths, atomic save/load
+│   ├── verify.py                # recompute a job's mean with numpy and compare (runs inside the image)
+│   └── tests/
+│       └── test_compute.py
+├── scripts/
+│   └── demo.sh                  # create a job, wait, verify (uses curl + docker compose exec)
+└── bench/
+    └── simulate.py
+```
+
+---
+
+## 3. Configuration (environment variables)
+
+| Variable | Used by | Default | Meaning |
+|---|---|---|---|
+| `DATABASE_URL` | all | — | Postgres connection string |
+| `RABBITMQ_URL` | all | — | RabbitMQ connection string |
+| `DATA_DIR` | all | `/data` | Root of shared file storage |
+| `MAX_FAN_IN` | api, scheduler | `5` | Max inputs per task |
+| `PORT` | api | `3000` | HTTP port |
+| `TICK_MS` | scheduler | `500` | Scheduler tick interval |
+| `MAX_ATTEMPTS` | scheduler | `3` | Failures before the job is `FAILED` |
+| `WORKER_DEAD_MS` | scheduler | `10000` | Heartbeat age after which a worker is `DEAD` |
+| `BACKUP_FACTOR` | scheduler | `2` | A task is "slow" if running > factor × median duration |
+| `INITIAL_WORKERS` | manager | `3` | Seeds `settings.desired_workers` if missing |
+| `WORKER_SLOWDOWN` | manager | `1` | Comma list of slowdown factors, cycled by worker index (e.g. `1,1,3`) |
+| `HEARTBEAT_MS` | worker | `2000` | Heartbeat interval |
+| `WORKER_MEMORY_MB` | worker | `0` (off) | If > 0, cap each worker process's memory with `resource.setrlimit(RLIMIT_AS)` (simulated RAM constraint) |
+
+Derived: `QUEUE_TARGET = max(2, 2 × desired_workers)` — how many tasks may wait in RabbitMQ at once.
+
+---
+
+## 4. File storage
+
+All paths stored in the DB and in messages are **relative to `DATA_DIR`**.
+
+```
+{jobId}/raw/{index:05d}.npy        raw file, float32, shape (C,), index is 0-based
+{jobId}/partials/{taskId}.npy      partial sums, float64, shape (C,)
+{jobId}/result.npy                 final means, float64, shape (C,)
+{jobId}/result.csv                 final means, one value per line, position order
+```
+
+- **Random values:** uniform in [0, 1). Seed per file so results are reproducible:
+  `seed = int.from_bytes(sha256(f"{jobId}:{index}").digest()[:8], "little")`, then
+  `np.random.default_rng(seed).random(C, dtype=np.float32)`.
+- **Atomic writes:** write to `path + f".tmp-{workerId}"` in the same directory, then `os.replace(tmp, path)`. Use a file handle with `np.save(fh, arr)` (passing a filename makes NumPy append `.npy`).
+- **Reads:** `np.load(path, mmap_mode="r")`. Load and add **one input at a time**.
+- Validate shape `(C,)` on every load; raise on mismatch.
+
+---
+
+## 5. Database
+
+Use `schema.sql` as-is (mounted into Postgres at startup). Status meanings:
+
+| Table.column | Values |
+|---|---|
+| `jobs.status` | `PENDING` (created, no task finished yet) → `RUNNING` → `COMPLETED` / `FAILED` / `CANCELLED` |
+| `tasks.status` | `PENDING` (not yet published) → `QUEUED` (published; waiting or being processed) → `DONE` / `FAILED` |
+| `items.state` | `READY` (in the basket) → `USED` (taken by a COMBINE task) |
+| `workers.status` | `IDLE`, `BUSY`, `DRAINING`, `DEAD` |
+
+Definitions used throughout:
+
+- **Basket of a job** = `items` with `job_id = X AND state = 'READY'`, ordered by `created_at`.
+- **In flight for a job** = `tasks` with `job_id = X AND status IN ('PENDING','QUEUED')`.
+- **All files generated** = `jobs.files_generated = jobs.f`.
+- **Fresh worker** = `last_seen > now() - WORKER_DEAD_MS`.
+- **Busy workers** = fresh workers with `status = 'BUSY'`. **Idle workers** = fresh with `status = 'IDLE'`.
+- **Waiting in queue** = `count(tasks QUEUED whose job is PENDING or RUNNING) − busy workers` (floor at 0). Counting only active jobs stops cancelled or failed jobs from distorting the number.
+
+---
+
+## 6. Queues and message contracts
+
+Two durable queues, persistent messages, publisher confirms:
+
+| Queue | Producer | Consumer | Consumer settings |
+|---|---|---|---|
+| `tasks` | API (first batch), scheduler | workers | `prefetch = 1`, manual ack |
+| `results` | workers | scheduler | `prefetch = 10`, manual ack, processed **one at a time** |
+
+**Task message**
+
+```json
+{
+  "taskId": "uuid",
+  "jobId": "uuid",
+  "type": "GENERATE",               
+  "c": 5000,
+  "attempt": 1,
+  "isFinal": false,
+  "isBackup": false,
+  "fileIndexes": [0, 1, 2, 3, 4],
+  "inputs": []
+}
+```
+
+For `COMBINE`: `fileIndexes` is empty and `inputs` is `[{ "path": "…", "count": 5 }, …]` (1–5 entries).
+
+**Result message**
+
+```json
+{
+  "taskId": "uuid",
+  "jobId": "uuid",
+  "workerId": "workers-1",
+  "attempt": 1,
+  "status": "DONE",
+  "outputs": [{ "path": "{jobId}/raw/00000.npy", "count": 1 }],
+  "durationMs": 120,
+  "error": null
+}
+```
+
+- GENERATE → one output per file, each `count = 1`.
+- COMBINE (not final) → one output: `{jobId}/partials/{taskId}.npy` with the summed count.
+- COMBINE (final) → one output: `{jobId}/result.csv` with `count` = total (must equal F).
+- On failure: `status = "FAILED"`, `outputs = []`, `error` = message.
+- Job was cancelled or failed before the worker started: `status = "SKIPPED"`, `outputs = []`. The worker still publishes this so the task never stays `QUEUED` forever.
+
+**Ordering rules (important):**
+
+- Publishing a task: **publish first (await confirm), then mark `QUEUED`**. A crash in between leaves it `PENDING`, so it is re-published later; a duplicate is harmless. The reverse order could leave a task `QUEUED` but never in RabbitMQ.
+- Worker: **publish the result (await confirm), then ack the task.**
+- Scheduler: **commit the DB transaction, then ack the result.**
+
+---
+
+## 7. API service (`server.ts`)
+
+| Endpoint | Behaviour |
+|---|---|
+| `POST /jobs` | Body `{ F, C }`. Both must be integers with `1 < F < 100000` and `1 < C < 1000000`, else `400 { error }`. In one transaction: insert the job (`PENDING`) and its ⌈F/5⌉ GENERATE tasks (`fileIndexes` in chunks of 5, 0-based; use one `INSERT … SELECT generate_series(…)`). Commit, then call `refill()` (publishes up to `QUEUE_TARGET` tasks). Log event "job created". Return `202 { jobId }`. |
+| `GET /jobs` | Newest 100 jobs: id, f, c, status, progress, created/started/finished, error. |
+| `GET /jobs/:id` | Job fields + progress + task counts by status + files_generated. `404` if missing. |
+| `GET /jobs/:id/result` | If `COMPLETED`: send `result.csv` as a download. Else `409 { status }`. |
+| `DELETE /jobs/:id` | If `PENDING`/`RUNNING`: set `CANCELLED` + `finished_at`; set its `PENDING` tasks to `FAILED` (error "cancelled"). Else `409`. |
+| `GET /workers` | All rows from `workers` (mark non-fresh as `DEAD` in the response). |
+| `PUT /workers` | Body `{ count }`, integer 0–32, else `400`. Upsert `settings.desired_workers`. Return `{ desired }`. |
+| `GET /stats` | `{ workers: {desired, idle, busy, draining, dead}, jobs: {waiting, running, completed, failed, cancelled}, tasks: {pending, queued, waitingInQueue, running, retries, backups} }`. `jobs.waiting` = `PENDING` jobs. |
+| `GET /events?after=<id>` | Up to 100 events with `id > after`, oldest first. |
+| `GET /` | Serves `public/index.html`. |
+
+**Progress %** = `COMPLETED ? 100 : 100 × Σ(len(inputs) − 1 over DONE COMBINE tasks) / (F − 1)`.
+SQL: `SUM(jsonb_array_length(payload->'inputs') - 1)`.
+
+---
+
+## 8. Scheduler (`scheduler.ts`)
+
+Runs two loops in one process. **Single instance only.**
+
+### 8.1 Results consumer → `handleResult(msg)`
+
+All steps in **one transaction**; ack the message only after commit.
+
+```
+lock task row (SELECT … FOR UPDATE); if missing → ack, return
+if task.status = 'DONE' → log "duplicate ignored", commit, ack, return
+lock job row (FOR UPDATE)
+if job.status in (CANCELLED, FAILED) or msg.status = 'SKIPPED'
+    → set task FAILED (error "job not active"), commit, ack, return
+
+if msg.status = 'FAILED':
+    if task.attempts >= MAX_ATTEMPTS → task FAILED, job FAILED (error), event
+    else → task PENDING (will be re-published), event "retry"
+    commit, ack, refill(), return
+
+task → DONE (worker_id, duration_ms, finished_at)
+if job.status = 'PENDING' → RUNNING, started_at = now()
+
+if type = GENERATE:
+    insert one READY item per output (ON CONFLICT (path) DO NOTHING)
+    files_generated += number of rows actually inserted
+elif is_final:
+    if outputs[0].count = job.f → job COMPLETED, result_path, finished_at, event
+    else → job FAILED, error "count mismatch", event
+else:
+    insert READY item for the output (ON CONFLICT (path) DO NOTHING)
+
+if job still RUNNING → planJob(job, fleet)
+event "worker X finished task Y (n inputs, ms)"
+commit → ack → refill()
+```
+
+### 8.2 Planner → `planJob(job, fleet)` (the basket rules)
+
+Called inside the caller's transaction with the job row already locked.
+
+```
+ready     = READY items of the job, oldest first
+inFlight  = count of job tasks in (PENDING, QUEUED)
+allGen    = job.files_generated = job.f
+fleetIdle = fleet.idleWorkers > 0 AND fleet.waitingInQueue = 0
+
+loop:
+  if len(ready) >= 5:
+      take = first 5
+      final = (len(ready) == 5 AND inFlight == 0 AND allGen)
+      createCombine(take, final); inFlight += 1; continue
+  if len(ready) >= 2 AND inFlight == 0 AND allGen:
+      createCombine(all ready, final = true); break
+  if len(ready) >= 2 AND fleetIdle:
+      createCombine(all ready, final = false); fleetIdle = false; break
+  if len(ready) == 1 AND inFlight == 0 AND allGen:
+      createCombine([the one item], final = true); break    # divide-only safety net
+  break
+```
+
+`createCombine(items, final)`: insert a `COMBINE` task (`PENDING`, payload inputs = `[{itemId, path, count}]`, `is_final`), then `UPDATE items SET state='USED', used_by=<task>` for those items. It is published later by `refill()`.
+
+### 8.3 Dispatcher → `refill()` (shared with the API)
+
+```
+target  = max(2, 2 × desired_workers)
+waiting = waitingInQueue (section 5)
+if waiting >= target → return
+pick up to (target − waiting) PENDING tasks of PENDING/RUNNING jobs, round-robin:
+
+  SELECT * FROM (
+    SELECT t.*, j.created_at AS job_created,
+           ROW_NUMBER() OVER (PARTITION BY t.job_id ORDER BY t.created_at) AS rn
+    FROM tasks t JOIN jobs j ON j.id = t.job_id
+    WHERE t.status = 'PENDING' AND j.status IN ('PENDING','RUNNING')
+  ) x
+  ORDER BY rn, job_created
+  LIMIT $n
+
+for each: build task message (attempt = attempts + 1), publish + await confirm,
+          then UPDATE tasks SET status='QUEUED', attempts=attempts+1, queued_at=now()
+```
+
+Run the select, publishes and updates in **one transaction**, and select the candidate rows with `FOR UPDATE OF t SKIP LOCKED` (wrap the window query so the lock applies to the `tasks` rows). The API and the scheduler both call `refill()`, and this guarantees they never publish the same task at the same time. Inside one process, also use a simple in-process lock (a promise chain) so `refill()` never runs twice concurrently.
+
+### 8.4 Tick loop (every `TICK_MS`)
+
+1. Mark non-fresh workers `DEAD`; log an event once per worker.
+2. Compute `fleet` (idle, busy, waitingInQueue).
+3. For each `RUNNING` job with ≥ 2 READY items: in a transaction, lock the job, `planJob(job, fleet)`. This lets rule 3 fire when a worker becomes idle.
+4. **Backups** (only if `idle > 0` and `waitingInQueue = 0`): find `QUEUED` tasks with `backup_sent = false` that a worker is currently running (`workers.current_task_id`), where elapsed > `BACKUP_FACTOR × median(duration_ms)` of the last 50 DONE tasks of the same type (minimum 1 s). Publish a copy (`isBackup = true`, same `taskId` and `attempt`), set `backup_sent = true`, log an event. Limit to `idle` copies per tick.
+5. `refill()`.
+
+---
+
+## 9. Worker (`worker.py`)
+
+One OS process per worker. Started by the manager with `(index, slowdown)`; `workerId = f"workers-{index}"`.
+
+```
+if WORKER_MEMORY_MB > 0: resource.setrlimit(RLIMIT_AS, (MB × 1024², MB × 1024²))
+connect Postgres (psycopg) and RabbitMQ (pika BlockingConnection, heartbeat=600)
+declare queues (durable); basic_qos(prefetch_count=1); enable confirm_delivery
+upsert own workers row: IDLE, slowdown, started_at
+start heartbeat thread (own DB connection): every HEARTBEAT_MS set last_seen = now()
+on SIGTERM: draining = True; set status DRAINING
+
+for each task message:
+    set status BUSY, current_task_id, current_task_started_at
+    if jobs.status in (CANCELLED, FAILED): publish result SKIPPED; ack; set IDLE; continue
+    if task has > 5 inputs or > 5 fileIndexes: publish result FAILED ("fan-in > 5"); ack; continue
+    start = now
+    try:
+        outputs = compute.generate_files(...)  or  compute.combine(...)
+        status = DONE
+    except Exception as e:
+        outputs, status, error = [], FAILED, str(e)
+    if slowdown > 1: sleep((slowdown − 1) × elapsed)          # demo only
+    publish result to 'results' (persistent, confirmed)
+    ack task
+    tasks_done += 1; status IDLE; current_task_id = NULL
+    if draining: stop consuming
+
+on exit: delete own workers row, close connections
+```
+
+**`compute.py` (pure functions, unit-tested):**
+
+```python
+def generate_files(data_dir, job_id, c, file_indexes):
+    if not 1 <= len(file_indexes) <= 5:
+        raise ValueError("a task may generate 1 to 5 files")
+    outputs = []
+    for i in file_indexes:
+        arr = np.random.default_rng(seed(job_id, i)).random(c, dtype=np.float32)
+        path = f"{job_id}/raw/{i:05d}.npy"
+        save_atomic(data_dir, path, arr)
+        outputs.append({"path": path, "count": 1})
+    return outputs
+
+def combine(data_dir, job_id, task_id, c, inputs, is_final):
+    if not 1 <= len(inputs) <= 5:
+        raise ValueError("a task may have 1 to 5 inputs")      # not assert: asserts can be disabled
+    acc, n = np.zeros(c, dtype=np.float64), 0
+    for inp in inputs:                                # one input in memory at a time
+        arr = load(data_dir, inp["path"], c)          # checks shape == (c,)
+        acc += arr
+        n += inp["count"]
+    if is_final:
+        mean = acc / n
+        save_atomic(data_dir, f"{job_id}/result.npy", mean)
+        save_csv_atomic(data_dir, f"{job_id}/result.csv", mean)   # np.savetxt, fmt="%.10f"
+        return [{"path": f"{job_id}/result.csv", "count": n}]
+    path = f"{job_id}/partials/{task_id}.npy"
+    save_atomic(data_dir, path, acc)
+    return [{"path": path, "count": n}]
+```
+
+**pika pitfall:** `BlockingConnection` cannot send heartbeats while your code is computing. If heartbeats time out, RabbitMQ closes the connection and redelivers the task. `heartbeat=600` avoids this for normal task sizes. (Alternative: run compute in a thread and ack with `connection.add_callback_threadsafe`.)
+
+---
+
+## 10. Worker manager (`manager.py`)
+
+```
+seed settings: INSERT desired_workers = INITIAL_WORKERS ON CONFLICT DO NOTHING
+slowdowns = WORKER_SLOWDOWN split by comma
+procs = {}               # index -> multiprocessing.Process
+every 2 s:
+    desired = settings.desired_workers
+    remove exited processes from procs (restart any that crashed unexpectedly)
+    alive = processes not asked to stop
+    if len(alive) < desired: start new ones with the lowest free indexes,
+                             slowdown = slowdowns[index % len(slowdowns)]
+    if len(alive) > desired: send SIGTERM to the highest indexes (they drain, then exit)
+on SIGTERM: terminate all children, wait, exit
+```
+
+---
+
+## 11. Dashboard (`public/index.html`)
+
+Plain HTML + JS, no build step. Poll every 1 s: `/stats`, `/jobs`, `/workers`, `/events?after=lastId`.
+
+| Section | Shows |
+|---|---|
+| Counters | Workers desired / idle / busy; jobs waiting / running / completed / failed; tasks queued / running; retries; backups |
+| Create job | Inputs F and C, "Create" button; show validation errors |
+| Workers | Number input + "Apply" (`PUT /workers`); table: id, status, slowdown, tasks done, current task |
+| Jobs | Table: short id, F, C, status, progress bar, elapsed, Download (when completed), Cancel (when active) |
+| Activity log | Newest events at the top, keep the last 200 |
+
+Works on a narrow screen (tables scroll horizontally).
+
+---
+
+## 12. Edge cases (must work)
+
+| Case | Expected behaviour |
+|---|---|
+| F = 2…5 | 1 GENERATE task, then one final COMBINE with F inputs |
+| F = 6 | GENERATE 5 + 1; COMBINE 5 → partial; final COMBINE {partial, file 6} |
+| F not a multiple of 5 | Last GENERATE task has fewer files; tree adapts |
+| W = 0 | Jobs wait; resume when W > 0 |
+| Worker killed mid-task | RabbitMQ redelivers; result still correct |
+| Same result delivered twice | Second one ignored (`DONE` check, unique path) |
+| Backup and original both finish | First accepted, second ignored |
+| Cancel mid-job | No new tasks published; queued tasks come back as `SKIPPED`; late results ignored; queue counts stay correct |
+| Task with > 5 inputs (bug) | Worker refuses it and reports `FAILED` |
+| Two jobs at once | Both progress (round-robin) and both complete correctly |
+| Scheduler restarted | Unacked results redelivered; tick re-plans; no loss |
+| RabbitMQ restarted | Durable queues + persistent messages survive |
+| Invalid input (`F = 1`, `C = 1000000`, `F = "abc"`) | `400` with a clear message |
+
+---
+
+## 13. Milestones and acceptance criteria
+
+| # | Build | Done when |
+|---|---|---|
+| M1 | Compose, Dockerfiles, schema, empty API | `docker compose up` starts all services; `GET /stats` returns zeros |
+| M2 | `compute.py` + unit tests | `combine([1,2,3],[4,5,6])` → `[2.5, 3.5, 4.5]`; random arrays match `np.mean` (1e-12); fan-in > 5 raises |
+| M3 | `POST /jobs` + `refill()` + worker GENERATE path | Creating a job produces F files in `data/{jobId}/raw/` |
+| M4 | Scheduler: `handleResult`, `planJob`, final task | Jobs reach `COMPLETED`; `scripts/verify.py` passes for F = 2, 6, 37, 1000 |
+| M5 | Retries, duplicates, dead workers, cancel | Killing a worker mid-job still gives a correct result; cancelling a job leaves no task stuck in `QUEUED` |
+| M6 | Round-robin fairness, rule 3, backups | Small job submitted after a big one finishes first; with `WORKER_SLOWDOWN=1,1,3` fast workers complete more tasks |
+| M7 | `PUT /workers`, manager, dashboard | Changing W mid-job works without interrupting tasks; dashboard shows all counters live |
+| M8 | README, `demo.sh`, screenshots | A reviewer can run the demo from the README in under 5 minutes |
+
+---
+
+## 14. Testing and scripts
+
+- **`worker/tests/test_compute.py`** (pytest): assignment example; mixed raw + partial inputs; counts add correctly; shape mismatch raises; > 5 inputs raises.
+- **`worker/verify.py <jobId>`** (run with `docker compose exec workers python verify.py <jobId>`): loads every raw file of the job, computes `np.mean(axis=0)` in float64, compares with `result.npy`; prints max absolute difference; exits non-zero if > 1e-9. It lives in the worker image because NumPy is installed there.
+- **`scripts/demo.sh`**: `POST /jobs {F:50, C:10000}` → poll `GET /jobs/:id` until `COMPLETED` → `docker compose exec workers python verify.py <jobId>` → print summary.
+- **Manual tests** to record for the submission: slow-worker demo, crash test (`docker compose exec workers pkill -9 -f worker.py` kills one worker; the manager restarts it), fairness test, scaling test.
+
+---
+
+## 15. README must contain
+
+1. One-paragraph overview and a link to `01-design-document.md`
+2. Prerequisite: Docker Desktop
+3. `docker compose up --build`
+4. URLs: dashboard `http://localhost:3000`, RabbitMQ `http://localhost:15672` (guest/guest)
+5. Example: `curl -X POST localhost:3000/jobs -H 'Content-Type: application/json' -d '{"F":50,"C":10000}'`
+6. How to download a result and verify it (`docker compose exec workers python verify.py <jobId>`)
+7. How to change W and the slowdown demo
+8. Note on limits: the design supports F < 100,000 and C < 1,000,000, but a laptop's disk and memory limit demo sizes (use F ≤ 2,000, C ≤ 100,000)
+
+---
+
+## 16. Common mistakes to avoid
+
+- Averaging partial results, or dividing anywhere except the final task.
+- Loading all 5 inputs into memory at once instead of one at a time.
+- Marking a task `QUEUED` before the publish is confirmed.
+- Acking a result before the DB transaction commits.
+- Letting workers write to `tasks` or `items`.
+- Enqueuing all of a big job's tasks at once (breaks fairness).
+- `np.save("file")` adding a second `.npy`; use a file handle.
+- Writing temp files in a different directory from the target (`os.replace` must stay on one filesystem).
+- Running more than one scheduler instance.
+- Acking a task without publishing a result (e.g. for a cancelled job), which leaves it `QUEUED` forever.
+- Using `assert` for the 5-input check (asserts are removed with `python -O`).

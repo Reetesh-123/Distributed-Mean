@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1030 580" width="1030" height="580" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif">
+<title>Data model</title>
+<style>
+.th{fill:#ffffff;font-size:14px;font-weight:700}
+.col{fill:#1b1f24;font-size:12.5px;font-family:Consolas, Menlo, monospace}
+.type{fill:#5f6977;font-size:11.5px}
+.key{fill:#2563eb;font-size:10px;font-weight:700}
+.ln{fill:none;stroke:#5f6977;stroke-width:1.6}
+.lbl{fill:#5f6977;font-size:11.5px}
+.card{fill:#1b1f24;font-size:12px;font-weight:700}
+.note{fill:#5f6977;font-size:11.5px}
+</style>
+<defs><marker id="ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#5f6977"/></marker></defs>
+<rect width="1030" height="580" fill="#ffffff"/>
+<path d="M290,100 L370,100" class="ln" marker-end="url(#ah)"/>
+<text x="330" y="92" class="lbl" text-anchor="middle">has many</text>
+<text x="296" y="116" class="card">1</text><text x="352" y="116" class="card">N</text>
+<path d="M630,80 L770,80" class="ln" marker-end="url(#ah)"/>
+<text x="700" y="72" class="lbl" text-anchor="middle">produces (produced_by)</text>
+<path d="M770,140 L630,140" class="ln" marker-end="url(#ah)"/>
+<text x="700" y="132" class="lbl" text-anchor="middle">consumed by (used_by)</text>
+<path d="M155,260 L155,300 L890,300 L890,200" class="ln" marker-end="url(#ah)"/>
+<text x="520" y="292" class="lbl" text-anchor="middle">has many</text>
+<text x="161" y="276" class="card">1</text>
+<text x="896" y="218" class="card">N</text>
+<text x="370" y="470" class="note">job_id is optional and has no foreign key</text>
+<text x="20" y="560" class="note">PK = primary key, FK = foreign key. Types: string is text (ids are UUIDs), json is jsonb, datetime is a timestamp with time zone.</text>
+<rect x="20" y="30" width="270" height="230" rx="8" fill="#ffffff" stroke="#c3cad4" stroke-width="1.5"/>
+<path d="M20,60 L20,38 Q20,30 28,30 L282,30 Q290,30 290,38 L290,60 Z" fill="#2563eb"/>
+<text x="32" y="50" class="th">jobs</text>
+<text y="54" class="key"><tspan x="30" dy="20">PK</tspan><tspan x="30" dy="20"></tspan><tspan x="30" dy="20"></tspan><tspan x="30" dy="20"></tspan><tspan x="30" dy="20"></tspan><tspan x="30" dy="20"></tspan><tspan x="30" dy="20"></tspan><tspan x="30" dy="20"></tspan><tspan x="30" dy="20"></tspan><tspan x="30" dy="20"></tspan></text>
+<text y="54" class="col"><tspan x="56" dy="20">id</tspan><tspan x="56" dy="20">f</tspan><tspan x="56" dy="20">c</tspan><tspan x="56" dy="20">status</tspan><tspan x="56" dy="20">files_generated</tspan><tspan x="56" dy="20">result_path</tspan><tspan x="56" dy="20">error</tspan><tspan x="56" dy="20">created_at</tspan><tspan x="56" dy="20">started_at</tspan><tspan x="56" dy="20">finished_at</tspan></text>
+<text y="54" class="type" text-anchor="end"><tspan x="280" dy="20">string</tspan><tspan x="280" dy="20">int</tspan><tspan x="280" dy="20">int</tspan><tspan x="280" dy="20">string</tspan><tspan x="280" dy="20">int</tspan><tspan x="280" dy="20">string</tspan><tspan x="280" dy="20">string</tspan><tspan x="280" dy="20">datetime</tspan><tspan x="280" dy="20">datetime</tspan><tspan x="280" dy="20">datetime</tspan></text>
+<rect x="370" y="30" width="260" height="230" rx="8" fill="#ffffff" stroke="#c3cad4" stroke-width="1.5"/>
+<path d="M370,60 L370,38 Q370,30 378,30 L622,30 Q630,30 630,38 L630,60 Z" fill="#c2640a"/>
+<text x="382" y="50" class="th">tasks</text>
+<text y="54" class="key"><tspan x="380" dy="20">PK</tspan><tspan x="380" dy="20">FK</tspan><tspan x="380" dy="20"></tspan><tspan x="380" dy="20"></tspan><tspan x="380" dy="20"></tspan><tspan x="380" dy="20"></tspan><tspan x="380" dy="20"></tspan><tspan x="380" dy="20"></tspan><tspan x="380" dy="20"></tspan><tspan x="380" dy="20"></tspan></text>
+<text y="54" class="col"><tspan x="406" dy="20">id</tspan><tspan x="406" dy="20">job_id</tspan><tspan x="406" dy="20">type</tspan><tspan x="406" dy="20">payload</tspan><tspan x="406" dy="20">is_final</tspan><tspan x="406" dy="20">status</tspan><tspan x="406" dy="20">attempts</tspan><tspan x="406" dy="20">backup_sent</tspan><tspan x="406" dy="20">worker_id</tspan><tspan x="406" dy="20">duration_ms</tspan></text>
+<text y="54" class="type" text-anchor="end"><tspan x="620" dy="20">string</tspan><tspan x="620" dy="20">string</tspan><tspan x="620" dy="20">string</tspan><tspan x="620" dy="20">json</tspan><tspan x="620" dy="20">bool</tspan><tspan x="620" dy="20">string</tspan><tspan x="620" dy="20">int</tspan><tspan x="620" dy="20">bool</tspan><tspan x="620" dy="20">string</tspan><tspan x="620" dy="20">int</tspan></text>
+<rect x="770" y="30" width="240" height="170" rx="8" fill="#ffffff" stroke="#c3cad4" stroke-width="1.5"/>
+<path d="M770,60 L770,38 Q770,30 778,30 L1002,30 Q1010,30 1010,38 L1010,60 Z" fill="#15803d"/>
+<text x="782" y="50" class="th">items</text>
+<text y="54" class="key"><tspan x="780" dy="20">PK</tspan><tspan x="780" dy="20">FK</tspan><tspan x="780" dy="20">FK</tspan><tspan x="780" dy="20">FK</tspan><tspan x="780" dy="20"></tspan><tspan x="780" dy="20"></tspan><tspan x="780" dy="20"></tspan></text>
+<text y="54" class="col"><tspan x="806" dy="20">id</tspan><tspan x="806" dy="20">job_id</tspan><tspan x="806" dy="20">produced_by</tspan><tspan x="806" dy="20">used_by</tspan><tspan x="806" dy="20">path (unique)</tspan><tspan x="806" dy="20">count</tspan><tspan x="806" dy="20">state</tspan></text>
+<text y="54" class="type" text-anchor="end"><tspan x="1000" dy="20">string</tspan><tspan x="1000" dy="20">string</tspan><tspan x="1000" dy="20">string</tspan><tspan x="1000" dy="20">string</tspan><tspan x="1000" dy="20">string</tspan><tspan x="1000" dy="20">int</tspan><tspan x="1000" dy="20">string</tspan></text>
+<rect x="20" y="350" width="270" height="170" rx="8" fill="#ffffff" stroke="#c3cad4" stroke-width="1.5"/>
+<path d="M20,380 L20,358 Q20,350 28,350 L282,350 Q290,350 290,358 L290,380 Z" fill="#5f6977"/>
+<text x="32" y="370" class="th">workers</text>
+<text y="374" class="key"><tspan x="30" dy="20">PK</tspan><tspan x="30" dy="20"></tspan><tspan x="30" dy="20"></tspan><tspan x="30" dy="20"></tspan><tspan x="30" dy="20"></tspan><tspan x="30" dy="20"></tspan><tspan x="30" dy="20"></tspan></text>
+<text y="374" class="col"><tspan x="56" dy="20">id</tspan><tspan x="56" dy="20">status</tspan><tspan x="56" dy="20">slowdown</tspan><tspan x="56" dy="20">current_task_id</tspan><tspan x="56" dy="20">current_task_started_at</tspan><tspan x="56" dy="20">tasks_done</tspan><tspan x="56" dy="20">last_seen</tspan></text>
+<text y="374" class="type" text-anchor="end"><tspan x="280" dy="20">string</tspan><tspan x="280" dy="20">string</tspan><tspan x="280" dy="20">float</tspan><tspan x="280" dy="20">string</tspan><tspan x="280" dy="20">datetime</tspan><tspan x="280" dy="20">int</tspan><tspan x="280" dy="20">datetime</tspan></text>
+<rect x="370" y="350" width="260" height="110" rx="8" fill="#ffffff" stroke="#c3cad4" stroke-width="1.5"/>
+<path d="M370,380 L370,358 Q370,350 378,350 L622,350 Q630,350 630,358 L630,380 Z" fill="#5f6977"/>
+<text x="382" y="370" class="th">events</text>
+<text y="374" class="key"><tspan x="380" dy="20">PK</tspan><tspan x="380" dy="20"></tspan><tspan x="380" dy="20"></tspan><tspan x="380" dy="20"></tspan></text>
+<text y="374" class="col"><tspan x="406" dy="20">id</tspan><tspan x="406" dy="20">job_id (optional)</tspan><tspan x="406" dy="20">message</tspan><tspan x="406" dy="20">created_at</tspan></text>
+<text y="374" class="type" text-anchor="end"><tspan x="620" dy="20">int</tspan><tspan x="620" dy="20">string</tspan><tspan x="620" dy="20">string</tspan><tspan x="620" dy="20">datetime</tspan></text>
+<rect x="770" y="350" width="240" height="70" rx="8" fill="#ffffff" stroke="#c3cad4" stroke-width="1.5"/>
+<path d="M770,380 L770,358 Q770,350 778,350 L1002,350 Q1010,350 1010,358 L1010,380 Z" fill="#5f6977"/>
+<text x="782" y="370" class="th">settings</text>
+<text y="374" class="key"><tspan x="780" dy="20">PK</tspan><tspan x="780" dy="20"></tspan></text>
+<text y="374" class="col"><tspan x="806" dy="20">key</tspan><tspan x="806" dy="20">value</tspan></text>
+<text y="374" class="type" text-anchor="end"><tspan x="1000" dy="20">string</tspan><tspan x="1000" dy="20">string</tspan></text>
+</svg>

@@ -1,0 +1,193 @@
+# Distributed Job Processing System — Design Document
+
+**Author:** Reetesh Kumar · **Stack:** Node.js + Express + TypeScript · Python · PostgreSQL · RabbitMQ · Docker Compose
+
+---
+
+## 1. Summary
+
+A system that takes a large job, splits it into small tasks, distributes them across a fleet of **W** workers, and aggregates the workers' outputs into a single result for the user. Workers run at different speeds and can each handle at most 5 files at a time, so the system decides how to split the work, keeps every worker busy, and knows exactly when a job is finished. Multiple jobs can run at the same time.
+
+The job type implemented is a **per-index mean**: the user picks F files of C random numbers, and the result is one file holding the mean of every position. For example, files `[1, 2, 3]` and `[4, 5, 6]` give `[2.5, 3.5, 4.5]`.
+
+Each task returns a **list of C sums (one per position) plus a count** of how many files went into it, instead of averages. Lists are added position by position, and counts are added together. This works in any order, so results are aggregated as soon as they are ready, and each position's sum is divided by the count once at the end.
+
+---
+
+## 2. Requirements
+
+### Functional
+
+1. **Create a job:** the user submits F and C through the API (1 < F < 100,000 and 1 < C < 1,000,000); the system generates the files and queues the work.
+2. **Distribute and aggregate:** the job is split into tasks of at most 5 files, spread across the workers, and all partial results are aggregated into one result file (the mean of every position).
+3. **Track the job:** the user can check status and progress, download the result, or cancel.
+4. **Run jobs concurrently:** new jobs can be submitted while others run. *(Bonus: W is configurable via the API, and a UI shows live state: workers free and busy, jobs waiting, running and completed, tasks on the queue, and an activity log.)*
+
+### Non-functional
+
+1. **Efficient:** workers spend minimal time idle; slow workers never hold up fast ones.
+2. **Correct:** the result matches the true mean, however the work was split.
+3. **Reliable:** if a worker crashes, its task is retried; no file is lost or counted twice.
+4. **Fair and scalable:** large jobs don't block small ones; handles the full range, up to 99,999 files × 999,999 numbers per file.
+
+---
+
+## 3. Out of scope
+
+- User accounts and authentication
+- Deployment across multiple machines or the cloud (runs locally with Docker Compose)
+- Keeping results long-term
+
+---
+
+## 4. Core entities
+
+| Entity | What it is |
+|---|---|
+| **Job** | One user request: F, C, status, result |
+| **File** | One generated file of C random numbers (values in 0–1) |
+| **Task** | One unit of work for a worker: *generate up to 5 files*, or *combine up to 5 items* |
+| **Item** | Something waiting to be combined: a raw file or a partial result. It holds a **list of C sums** (one per position) and a **count** of how many files it represents. A raw file is an item with count = 1. |
+| **Worker** | A Python process that takes one task at a time from the queue. There are **W workers for the whole system**, shared by all jobs; they wait idle until a task appears. |
+
+---
+
+## 5. API
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| `POST` | `/jobs` | Create a job. Body `{ "F": 1000, "C": 5000 }` → `{ "jobId": "..." }`. Returns `400` unless 1 < F < 100,000 and 1 < C < 1,000,000. |
+| `GET` | `/jobs` | List jobs with status and progress |
+| `GET` | `/jobs/:id` | One job's status and progress |
+| `GET` | `/jobs/:id/result` | Download the result (CSV) |
+| `DELETE` | `/jobs/:id` | Cancel a job |
+| `GET` | `/workers` | Workers and whether each is busy or free |
+| `PUT` | `/workers` | Change W. Body `{ "count": 5 }` *(bonus)* |
+| `GET` | `/stats` | Numbers for the dashboard: jobs waiting / running / done, tasks queued, workers busy / free |
+| `GET` | `/events` | Activity log entries for the dashboard *(bonus)* |
+| `GET` | `/` | The dashboard page *(bonus)* |
+
+---
+
+## 6. High-level design
+
+```mermaid
+%%{init: {"themeVariables": {"fontSize": "20px"}, "flowchart": {"nodeSpacing": 80, "rankSpacing": 90, "padding": 24}}}%%
+flowchart TB
+  User([User / UI])
+  API["API<br/>Express + TypeScript"]
+  DB[("Database<br/>PostgreSQL")]
+  TQ[["Task queue<br/>RabbitMQ"]]
+  W["Workers × W<br/>Python"]
+  FS[("File storage<br/>shared folder")]
+  RQ[["Result queue<br/>RabbitMQ"]]
+  S["Scheduler<br/>TypeScript"]
+
+  User -->|1. create job| API
+  API -->|2. save job| DB
+  API -->|3. first tasks| TQ
+  TQ -->|4. one task at a time| W
+  W <-->|5. read and write files| FS
+  W -->|6. task done| RQ
+  RQ --> S
+  S -->|7. next tasks| TQ
+  S -->|record progress| DB
+```
+
+**How it works:**
+
+1. The user creates a job through the **API**.
+2. The API saves the job in the **database**.
+3. The API puts the first tasks (generate the files) on the **task queue**.
+4. Each free **worker** takes one task.
+5. The worker reads its inputs from **file storage**, does the work, and saves the output there.
+6. The worker reports "done, here's the count" on the **result queue**.
+7. The **scheduler** adds the result to the job's waiting items. When 5 are ready, it creates the next combine task. When everything left fits in one task and nothing else is running, it creates the **final task**, which also divides each position's sum by the count. When the final task finishes, the job is done.
+
+Steps 4–7 repeat until the job finishes.
+
+The **scheduler** is a module of the TypeScript backend (same codebase as the API), not an extra system. The bonus **worker manager** (not shown) starts or stops worker processes to match W.
+
+---
+
+## 7. Data model
+
+```mermaid
+erDiagram
+  JOBS ||--o{ TASKS : "has"
+  JOBS ||--o{ ITEMS : "has"
+  TASKS ||--o{ ITEMS : "produces"
+
+  JOBS {
+    uuid id PK
+    int f
+    int c
+    text status "PENDING, RUNNING, COMPLETED, FAILED, CANCELLED"
+    int files_generated
+    text result_path
+  }
+  TASKS {
+    uuid id PK
+    uuid job_id FK
+    text type "GENERATE or COMBINE"
+    jsonb inputs "list of path and count"
+    bool is_final
+    text status "PENDING, QUEUED, DONE, FAILED"
+    int attempts
+  }
+  ITEMS {
+    uuid id PK
+    uuid job_id FK
+    uuid produced_by FK
+    text path "where the file is"
+    int count "files it represents"
+    text state "READY or USED"
+  }
+  WORKERS {
+    text id PK
+    text status "IDLE, BUSY, DRAINING, DEAD"
+    int tasks_done
+    timestamp last_seen
+  }
+  EVENTS {
+    bigint id PK
+    uuid job_id
+    text message "activity log line"
+  }
+  SETTINGS {
+    text key PK "e.g. desired_workers"
+    text value "e.g. 3"
+  }
+```
+
+- The **database** stores only small facts: what exists, its status, where it is, and its count.
+- The **numbers** live in files (`.npy`) in file storage, which is a shared folder. Each file is a list of C values in position order, so position 1 is always index 0, position 2 is index 1, and so on.
+- A job's **waiting items** are the rows in `ITEMS` with state `READY`.
+
+---
+
+## 8. Key design decisions
+
+**Combining results.** Each task returns a **list of per-position sums plus a count**, never averages. Averaging averages is wrong when groups have different sizes, and the 5-file limit guarantees they will. Lists are added position by position (index 0 with index 0, and so on), counts are added together, and this works in any order. This is the same principle federated learning uses to combine results from different participants: each result is weighted by how much data it came from.
+
+**Splitting a job.** A job with F > 5 becomes many queue items: ⌈F / 5⌉ generate tasks plus about (F − 1) / 4 combine tasks, because each 5-input combine turns 5 items into 1. No task ever has more than 5 inputs.
+
+**Enforcing the 5-file limit (simulated RAM).** The limit is guaranteed in three places: the scheduler never builds a task with more than 5 inputs; each worker takes only one task at a time (`prefetch = 1`) and rejects any task with more than 5 inputs; and a worker loads one input at a time while adding. Optionally, each worker process also gets a real operating-system memory cap.
+
+**Distributing work.** Workers **pull one task at a time** from the queue, so fast workers naturally do more. Results are combined **as soon as up to 5 are ready**, from any level of the tree, so nobody waits for a "round" to finish. Near the end of a job, an idle worker can run a **backup copy** of a task stuck on a slow worker; the first result wins.
+
+**Knowing a job is finished.** The final task is created only when all remaining items are in it, nothing else is running, and nothing else is being generated. Afterwards the system checks that the final count equals **F**.
+
+**Multiple jobs.** The queue is kept short and refilled by **taking turns between jobs**, so a large job can't block a small one.
+
+---
+
+## 9. Alternatives considered
+
+| Alternative | Why not chosen |
+|---|---|
+| Workers return averages | Wrong answer when groups differ in size |
+| Split files equally between workers at the start | The slowest worker decides the total time (~1.7× slower in simulation) |
+| One machine combines all partial results | Breaks the 5-file limit and becomes a bottleneck |
+| Combine in fixed rounds (wait for each level) | Fast workers sit idle waiting for slow ones |
+| Put all of a job's tasks on the queue at once | A large job blocks every job submitted after it |

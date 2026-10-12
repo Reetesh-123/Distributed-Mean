@@ -1,0 +1,253 @@
+# Decision Notes
+
+Each decision records the problem, the options considered, what was chosen, why, and what it costs. Ordered from most to least important. The short version of these is in section 8 and 9 of `01-design-document.md`.
+
+---
+
+## D1. What each task returns
+
+**Problem.** Results from many workers must be combined into one file holding the mean of every position. Each worker sees at most 5 files, so groups are always uneven (for example 12 files → groups of 5, 5 and 2).
+
+| Option | Pros | Cons |
+|---|---|---|
+| A list of per-position averages | Intuitive | **Wrong** when groups have different sizes: small groups get too much weight |
+| Averages + count | Correct with a weighted formula | Divides and re-multiplies at every step; more code and more rounding error |
+| **A list of per-position sums + one count** ✅ | Correct; combining is plain addition; works in any order | Must store one extra number per item |
+
+**Chosen:** each item is `{ sums: [C values, one per position], count: number of files }`. Combining adds lists index by index (position 1 with position 1, and so on) and adds counts. Each position is divided by the count once, in the final task.
+
+**What it unlocks.**
+- Any worker can combine any items, in any order.
+- A raw file is simply an item with count = 1, so there is only one kind of combine task.
+- No need to wait for "rounds" to finish.
+- Built-in check: the final count must equal F.
+
+**Why count is a single number.** Every file has all C positions, so the count is the same for every position. If files could have missing values, count would become a per-position list and the design would still work.
+
+**Prior art.** The same principle as aggregation in federated learning: results are weighted by how much data they came from.
+
+---
+
+## D2. How work is split across workers
+
+| Option | Pros | Cons |
+|---|---|---|
+| Static: give each worker F/W files at the start | No coordination | Job is as slow as the slowest worker (~1.7× ideal in simulation); breaks the 5-file limit |
+| **Small tasks (≤ 5 inputs), workers pull one at a time** ✅ | Fast workers automatically do more; respects the limit | More tasks and messages |
+
+**Why.** The assignment says workers run at different speeds and should idle as little as possible. With pulling (`prefetch = 1`), a slow worker simply does fewer tasks. Messages are tiny, so the extra count is cheap.
+
+---
+
+## D3. How partial results are combined
+
+| Option | Pros | Cons |
+|---|---|---|
+| One reducer adds all partials at the end | Simple | Breaks the 5-file limit; one node handles ~20,000 partials on large jobs; single point of failure |
+| Tree in fixed rounds (all of round 1, then round 2…) | Respects the limit | Fast workers idle at every round, waiting for the slowest task |
+| **Basket: combine any ready items (up to 5), from any level** ✅ | Respects the limit; no waiting between rounds; no central bottleneck | Tree shape isn't known in advance |
+
+**Why.** It's the only option that satisfies both the 5-file limit and "minimize idle time". The unpredictable tree shape doesn't matter, because the answer is identical for any shape (D1).
+
+**Basket rules** (applied after every result and every scheduler tick):
+
+1. ≥ 5 items ready → take 5, create a combine task.
+2. ≥ 2 ready, nothing in flight, all files generated → take all, create the **final** task.
+3. ≥ 2 ready and a worker is idle with the queue empty → take all, create a smaller task.
+4. Otherwise → wait.
+
+---
+
+## D4. Task size
+
+| Option | Pros | Cons |
+|---|---|---|
+| Always 2 inputs (binary tree) | Very small tasks | ~2× more tasks, deeper tree (17 levels vs 8 for 100k files) |
+| Always exactly 5 | Fewest tasks | Workers can sit idle while 2–4 items wait |
+| **Up to 5; fewer only when a worker would otherwise be idle** ✅ | Fewest tasks normally, no idling | Slightly more tasks near the end of a job |
+
+**Why.** 5 is the largest the constraint allows, which minimizes tasks and tree depth. Allowing smaller tasks only when a worker is idle trades a few extra tasks for zero idle time.
+
+---
+
+## D5. Who decides what happens next
+
+| Option | Pros | Cons |
+|---|---|---|
+| Workers coordinate among themselves | No central component | Workers race to claim the same items; needs distributed locks; hard to debug |
+| **One central scheduler** ✅ | All logic in one place; no races; workers stay simple | Must be restartable |
+
+**Why.** Correctness is easiest when only one component changes the basket. All state is in PostgreSQL and results are acked only after the DB commit, so the scheduler can restart without losing anything. It only processes small messages, so it isn't a bottleneck. It is a second entry point of the TypeScript backend, not an extra system.
+
+---
+
+## D6. Queue technology
+
+| Option | Pros | Cons |
+|---|---|---|
+| **RabbitMQ** ✅ | `prefetch = 1` gives one task per worker natively; automatic redelivery when a worker dies; built-in dashboard | One more service |
+| Redis Streams | Fast | Redelivery of a dead worker's tasks must be coded by hand |
+| AWS SQS | Fully managed | Needs AWS; can't run offline |
+| A table in PostgreSQL | No extra service | Polling; the assignment expects a separate queue |
+
+**Why.** RabbitMQ gives fair one-at-a-time dispatch and crash recovery with no custom code, and runs locally in Docker.
+
+---
+
+## D7. Database
+
+| Option | Pros | Cons |
+|---|---|---|
+| **PostgreSQL** ✅ | Transactions; relational model fits jobs → tasks → items | Needs a schema |
+| MongoDB | Flexible | Multi-document updates less natural |
+| Redis only | Fast | Weaker durability; no relational queries |
+
+**Why.** Processing one result changes several rows (task done, item added, next task created). A transaction makes this all-or-nothing, so a crash can never leave the basket half-updated.
+
+---
+
+## D8. How data moves between workers
+
+| Option | Pros | Cons |
+|---|---|---|
+| Numbers inside queue messages | No shared storage | Messages of many MB; queues are built for small messages |
+| **Files in shared storage; messages carry only path + count** ✅ | Queues stay fast; files of any size | Storage must be reachable by all workers |
+
+**Why.** One file can hold up to 999,999 values. Locally the storage is a shared folder; in production it would be S3 or MinIO.
+
+---
+
+## D9. File format
+
+| Option | Pros | Cons |
+|---|---|---|
+| CSV | Human-readable | ~4× larger; slow to parse |
+| **Binary NumPy `.npy`** ✅ | Compact; loads straight into arrays; values stay in position order | Not human-readable |
+
+**Why.** Reading files is most of the work, so a compact format speeds up every task. The final result is also written as CSV for the user. Raw values are `float32`; sums and means are `float64` for precision.
+
+---
+
+## D10. Where files are generated
+
+| Option | Pros | Cons |
+|---|---|---|
+| In the API | Simple | Large jobs (hundreds of GB) would freeze the API |
+| **On workers, as GENERATE tasks (≤ 5 files each)** ✅ | Parallel; API stays responsive; combining starts while generation continues | Two task types |
+
+**Why.** Generation is as heavy as the computation. Each file joins the basket as soon as it exists.
+
+---
+
+## D11. Fairness between jobs
+
+| Option | Pros | Cons |
+|---|---|---|
+| Enqueue all of a job's tasks immediately (FIFO) | Simple | A 100k-file job blocks every later job; cancelling leaves thousands of queued tasks |
+| Shortest job first | Small jobs finish fastest | Large jobs can starve |
+| **Shallow queue (~2×W waiting tasks), refilled round-robin across jobs** ✅ | Every job progresses; small jobs finish quickly; cancel and resize act immediately | More scheduler bookkeeping |
+
+**Why.** The assignment requires accepting new jobs while others run. Round-robin is the simplest policy that's fair to all.
+
+---
+
+## D12. Duplicates and crashes
+
+| Option | Pros | Cons |
+|---|---|---|
+| Exactly-once delivery | Ideal | Not achievable in practice |
+| **At-least-once delivery + idempotent processing** ✅ | Standard and reliable | A task occasionally runs twice |
+
+**Why.** Three layers make a second run harmless: (1) results for tasks already `DONE` are ignored, (2) each output path is unique per task and enforced by a unique constraint, (3) the final count must equal F.
+
+---
+
+## D13. Detecting job completion
+
+| Option | Pros | Cons |
+|---|---|---|
+| Compare tasks done with a precomputed total | Easy to display | The total depends on runtime behaviour (D4), so it can't be known exactly |
+| **Final task only when everything left is in it, nothing in flight, all files generated; then verify count = F** ✅ | Correct by construction, plus a safety check | None significant |
+
+---
+
+## D14. Changing the number of workers (bonus)
+
+| Option | Pros | Cons |
+|---|---|---|
+| API runs `docker compose --scale` | Real containers | API needs Docker access (security risk) |
+| **Worker manager process matching a desired count stored in the DB** ✅ | Simple; safe; same locally and on servers | Locally, workers share one container |
+
+**Why.** Implements the bonus without giving the API control over Docker. Scaling down drains workers (finish current task, then exit). In production this maps to Kubernetes replicas.
+
+---
+
+## D15. Dashboard updates (bonus)
+
+| Option | Pros | Cons |
+|---|---|---|
+| **Polling every second** ✅ | Simplest | Up to 1 s delay |
+| Server-Sent Events | Instant | A little more code |
+
+**Why.** One second is fine for monitoring. The activity log can move to SSE later without changing anything else.
+
+---
+
+## D16. Who enqueues a new job
+
+| Option | Pros | Cons |
+|---|---|---|
+| Scheduler finds new jobs and enqueues them | All queue logic in one place | Doesn't match "the API should then enqueue the job"; up to 1 s delay |
+| API enqueues all of a job's tasks | Matches the flow | Large jobs flood the queue (breaks D11) |
+| **API enqueues the first batch; scheduler releases the rest** ✅ | Matches the flow; work starts immediately; fairness kept | Two components publish to the queue |
+
+**Why.** Follows the assignment's flow while keeping the queue shallow and fair. If the API crashes after saving, unsent tasks stay `PENDING` and the scheduler sends them on its next tick.
+
+---
+
+## D17. Slow workers at the end of a job
+
+| Option | Pros | Cons |
+|---|---|---|
+| Do nothing; rely on small tasks | Simplest | Simulation: small jobs up to 1.5× slower than fixed rounds |
+| Never give tasks to slow workers near the end | Simple | Needs speed estimates; wastes capacity |
+| **Backup copy: an idle worker duplicates a long-running task; first result wins** ✅ | Best result at every job size in simulation | A little duplicate work |
+
+**Why.** The technique MapReduce uses for stragglers. It reuses the duplicate handling from D12.
+
+**Simulation** (`bench/simulate.py`, 8 workers: 4 at 1×, 2 at 2× slower, 2 at 3× slower; ratio to theoretical best, lower is better):
+
+| Files | Static split | Fixed rounds | Basket only | Basket + backups |
+|---|---|---|---|---|
+| 20 | 2.98× | 2.06× | 3.43× | **2.06×** |
+| 100 | 1.95× | 1.32× | 1.54× | **1.27×** |
+| 1,000 | 1.73× | 1.10× | 1.05× | **1.02×** |
+| 10,000 | 1.70× | 1.01× | 1.01× | **1.00×** |
+
+---
+
+## D18. Enforcing the 5-file limit (simulated RAM constraint)
+
+**Problem.** The assignment says the limit exists "to simulate RAM constraints on each worker", so it must hold for every task, not just on average.
+
+| Option | Pros | Cons |
+|---|---|---|
+| Trust the scheduler only | Simple | One bug and a worker silently breaks the rule |
+| **Defence in depth** ✅ | Rule holds even if one layer has a bug | A few extra lines of code |
+
+**Chosen layers:**
+1. The scheduler never builds a task with more than 5 inputs (GENERATE ≤ 5 files, COMBINE ≤ 5 items; partials count as files).
+2. Each worker holds one task at a time (`prefetch = 1`).
+3. The worker rejects any task with more than 5 inputs (reported as `FAILED`).
+4. The worker loads one input at a time and adds it to a running total, so actual memory is one file plus the total.
+5. Optional: a real OS memory cap per worker process (`RLIMIT_AS`, e.g. 512 MB). At C = 999,999, one raw file is ~4 MB and the running total ~8 MB, so the cap is safe for correct tasks and stops a broken one.
+
+---
+
+## Deferred decisions
+
+| Topic | Why deferred |
+|---|---|
+| Splitting by position ranges (column sharding) | Only helps when F is small and C is huge, and such jobs are already fast on one worker |
+| Object storage (S3/MinIO) | A shared folder is enough to run locally |
+| Live log via SSE | Polling meets the requirement; SSE is a small later upgrade |
