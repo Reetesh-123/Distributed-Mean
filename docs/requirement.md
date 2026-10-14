@@ -63,7 +63,7 @@ Every line of the assignment, mapped to where the solution covers it.
 | # | Assignment line | Our solution | Design | Built |
 |---|---|---|---|---|
 | 6.1 | F > 5: one or multiple items on the queue (no strict 1:1) | Many tasks per job, created as items become ready | âœ… | â¬œ |
-| 6.2 | Efficiency of the distribution algorithm | Pull + basket + backups; compared with 3 alternatives in `bench/simulate.py` | âœ… | â¬œ |
+| 6.2 | Efficiency of the distribution algorithm | Pull + basket + backups; compared with 3 alternatives in `tools/simulate.py` | âœ… | â¬œ |
 | 6.3 | How the system decides a job is finished | Final task only when all remaining items fit, nothing in flight, all files generated; then count = F check | âœ… | â¬œ |
 | 6.4 | Submit multiple jobs while others are running | Shallow queue refilled round-robin across jobs | âœ… | â¬œ |
 

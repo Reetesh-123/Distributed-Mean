@@ -515,12 +515,12 @@ return [{"path": path, "count": total_count}]</script></details></article>
 <div class="box why"><b>Why</b><p>Plain polling is simple and robust. The UI contains no business logic: it only calls the same public API as any other client.</p></div>
 </div></article>
 
-<article class="file" id="f-verify"><header><span class="path">verify.py</span><span class="lang">PY</span></header>
+<article class="file" id="f-verify"><header><span class="path">tools/verify.py</span><span class="lang">PY</span></header>
 <div class="grid">
 <div class="box what"><b>What</b><p>Recomputes the mean directly from the raw files (adding them one by one) and compares it with <code>result.npy</code>. Passes if the largest difference is at most 1e-9.</p></div>
 <div class="box why"><b>Why</b><p>An independent check that the distributed pipeline produced the right answer. It does not use partials, so a bug in the combining logic cannot hide.</p></div>
 </div>
-<details><summary>Run it</summary><script type="text/plain" class="code">docker compose exec workers python -m distributed_mean.verify <jobId></script></details></article>
+<details><summary>Run it</summary><script type="text/plain" class="code">docker compose exec workers python tools/verify.py <jobId></script></details></article>
 
 <!-- ================= STAGE 8 ================= -->
 <h2 class="stage" id="s8"><span class="sn">8</span>When things go wrong</h2>
@@ -556,9 +556,9 @@ await pool.query("UPDATE tasks SET backup_sent = true WHERE id = $1", [task.id])
 
 <!-- ================= STAGE 9 ================= -->
 <h2 class="stage" id="s9"><span class="sn">9</span>Scripts and tests</h2>
-<div class="flow"><a href="#f-scripts">scripts/</a><i>·</i><a href="#f-tests">tests</a><i>·</i><a href="#f-bench">bench/</a></div>
+<div class="flow"><a href="#f-scripts">tools/</a><i>·</i><a href="#f-tests">tests</a><i>·</i><a href="#f-bench">tools/ (models)</a></div>
 
-<article class="file" id="f-scripts"><header><span class="path">scripts/demo.sh · scripts/kill-worker.sh</span><span class="lang">Bash</span></header>
+<article class="file" id="f-scripts"><header><span class="path">tools/demo.sh · tools/kill-worker.sh</span><span class="lang">Bash</span></header>
 <div class="grid">
 <div class="box what"><b>What</b><p><code>demo.sh</code> creates a job, waits for it, downloads the CSV and runs <code>verify.py</code>. <code>kill-worker.sh</code> sends <code>kill -9</code> to one worker process.</p></div>
 <div class="box why"><b>Why</b><p>One command that proves the whole system works end to end, and a crash test that shows a killed worker does not break the result: the task is redelivered and the manager restarts the worker.</p></div>
@@ -570,7 +570,7 @@ await pool.query("UPDATE tasks SET backup_sent = true WHERE id = $1", [task.id])
 <div class="box why"><b>Why</b><p>The two risky parts are the arithmetic and the scheduling decisions. The unit tests need no services at all. The integration tests check the planner and result handler on real SQL, including duplicates, retries and a wrong final count.</p></div>
 </div></article>
 
-<article class="file" id="f-bench"><header><span class="path">bench/simulate.py · bench/planner_check.py</span><span class="lang">PY</span></header>
+<article class="file" id="f-bench"><header><span class="path">tools/simulate.py · tools/planner_check.py</span><span class="lang">PY</span></header>
 <div class="grid">
 <div class="box what"><b>What</b><p><code>simulate.py</code> compares four scheduling strategies on workers of different speeds. <code>planner_check.py</code> runs the waiting items rules on random jobs and asserts a correct mean, count = F, no task over 5 inputs and no deadlock.</p></div>
 <div class="box why"><b>Why</b><p>These are quick, standalone models used to choose the design and to test the planner rules before touching the real system.</p></div>

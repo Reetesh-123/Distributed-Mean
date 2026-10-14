@@ -334,7 +334,7 @@ COPY public ./public       # the dashboard page</code></pre>
     <tr><td><code>docker compose up -d --build</code></td><td>Same, but in the background</td></tr>
     <tr><td><code>docker compose ps</code></td><td>List the containers and whether they are running</td></tr>
     <tr><td><code>docker compose logs -f workers</code></td><td>Watch one container's output (try <code>api</code>, <code>scheduler</code>)</td></tr>
-    <tr><td><code>docker compose exec workers python verify.py &lt;jobId&gt;</code></td><td>Run a command <i>inside</i> a running container</td></tr>
+    <tr><td><code>docker compose exec workers python tools/verify.py &lt;jobId&gt;</code></td><td>Run a command <i>inside</i> a running container</td></tr>
     <tr><td><code>docker compose restart scheduler</code></td><td>Restart one container</td></tr>
     <tr><td><code>docker compose down</code></td><td>Stop and remove the containers (database data is kept)</td></tr>
     <tr><td><code>docker compose down -v</code></td><td>Same, and also delete the database volume (a fresh start)</td></tr>

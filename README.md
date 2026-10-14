@@ -24,15 +24,24 @@ docker compose up --build
 | RabbitMQ UI | http://localhost:15672 (guest / guest) |
 | Database GUI (Adminer) | http://localhost:8080. System `PostgreSQL`, server `postgres`, user `app`, password `app`, database `jobs` |
 
-Stop with `docker compose down`. Add `-v` to also delete the database.
+**Stop and keep everything:** `docker compose down`
+
+**Stop and remove all data** (jobs, activity log and the generated files), in one command:
+
+```bash
+tools/clean.sh            # Git Bash
+.\tools\clean.ps1         # PowerShell
+```
+
+It runs `docker compose down -v` and then empties `./data`. The next start is empty, with the default 3 workers.
 
 ## Try it
 
 The quickest way is the demo script. It creates a job, waits for it, downloads the result and checks it against NumPy:
 
 ```bash
-scripts/demo.sh              # F = 50, C = 10000
-scripts/demo.sh 1000 20000   # your own sizes
+tools/demo.sh              # F = 50, C = 10000
+tools/demo.sh 1000 20000   # your own sizes
 ```
 
 On Windows run it from Git Bash. Plain `bash` can point to a WSL distribution without Docker.
@@ -51,7 +60,7 @@ curl -X DELETE localhost:3000/jobs/<jobId>              # cancel
 To check any finished job yourself:
 
 ```bash
-docker compose exec workers python -m distributed_mean.verify <jobId>
+docker compose exec workers python tools/verify.py <jobId>
 ```
 
 It recomputes the mean from the raw files with `numpy.mean` and compares.
@@ -92,7 +101,7 @@ curl -X PUT localhost:3000/workers -H 'Content-Type: application/json' -d '{"cou
 
 # crash test: kill -9 a worker while a job runs. The result must still be correct.
 curl -X POST localhost:3000/jobs -H 'Content-Type: application/json' -d '{"F":1500,"C":100000}'
-scripts/kill-worker.sh
+tools/kill-worker.sh
 ```
 
 ## Tests
@@ -106,8 +115,8 @@ cd services/api && npm install && npm run build
 DATABASE_URL=postgres://app:app@localhost:5432/jobs RABBITMQ_URL=amqp://localhost npm run test:integration
 
 # randomized model of the scheduler rules (920 jobs) and the scheduling comparison
-python bench/planner_check.py
-python bench/simulate.py
+python tools/planner_check.py
+python tools/simulate.py
 ```
 
 The integration tests write to the same database the scheduler uses, so stop the `api`, `scheduler` and `workers` containers while they run. What was tested end to end is in [`docs/test-results.md`](docs/test-results.md).
@@ -131,10 +140,10 @@ services/
       config/         environment variables
     public/           the UI (plain HTML, CSS and JS)
     tests/integration/
-  worker/         Python 3.11, package distributed_mean (worker, worker manager, maths, verify)
+  worker/         Python 3.11, package distributed_mean (worker, worker manager, maths)
 db/schema.sql     tables
-scripts/          demo.sh, kill-worker.sh, show_job.py
-bench/            scheduler model and strategy comparison
+tools/            helper scripts, not part of the running system: demo.sh, kill-worker.sh,
+                  clean.sh, clean.ps1, show_job.py, verify.py, planner_check.py, simulate.py
 docs/             design and supporting documents
 docker-compose.yml
 ```

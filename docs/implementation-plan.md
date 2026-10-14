@@ -19,7 +19,7 @@ Docker Desktop and WSL2 were missing at first and are now installed; the notes b
 | **WSL2** | **not installed** | Needed by Docker: `wsl --install`, reboot |
 | Postgres / RabbitMQ | not local | Provided by Compose |
 
-Windows caveats: `RLIMIT_AS` (`WORKER_MEMORY_MB`) only works in the Linux worker container; `scripts/demo.sh` runs in Git Bash or WSL.
+Windows caveats: `RLIMIT_AS` (`WORKER_MEMORY_MB`) only works in the Linux worker container; `tools/demo.sh` runs in Git Bash or WSL.
 
 ## Milestones → where to read in the notes
 
@@ -34,5 +34,5 @@ Windows caveats: `RLIMIT_AS` (`WORKER_MEMORY_MB`) only works in the Linux worker
 | M7 `PUT /workers`, manager, dashboard | 10, 11 |
 | M8 README, `demo.sh`, screenshots | 14, 15 |
 
-Order tweak: M2 needs no Docker, so it can be done while Docker installs. Before M4, run `bench/planner_check.py` (see the notes header) as the reference for the basket rules.
+Order tweak: M2 needs no Docker, so it can be done while Docker installs. Before M4, run `tools/planner_check.py` (see the notes header) as the reference for the basket rules.
 Pitfalls to re-read before each milestone: notes section 16.

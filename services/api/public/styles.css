@@ -151,6 +151,30 @@ details > summary { padding: 12px 16px; cursor: pointer; font-weight: 500; }
 .log td.message { white-space: normal; }
 .scroll-log { max-height: 340px; overflow-y: auto; }
 
+/* ---- worker tiles ---- */
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; }
+.tiles[data-size=compact] { grid-template-columns: repeat(auto-fill, minmax(165px, 1fr)); gap: 8px; }
+.tiles[data-size=compact] .tile { padding: 9px 11px; }
+.tiles[data-size=dense] { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 6px; }
+.tiles[data-size=dense] .tile { padding: 7px 9px; }
+.tiles[data-size=dense] .sub, .tiles[data-size=dense] .foot, .tiles[data-size=dense] .what { font-size: 11.5px; }
+.tiles[data-size=dense] .foot { display: none; }
+.tile { padding: 12px 14px; display: flex; flex-direction: column; gap: 3px; }
+.tile.BUSY { border-color: var(--run); }
+.tile.DEAD { border-color: var(--bad); }
+.tile-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12.5px; }
+.tile .name { font-weight: 600; }
+.tile .what { font-weight: 600; margin-top: 6px; }
+.tile .sub { color: var(--muted); font-size: 12.5px; }
+.tile .foot { color: var(--muted); font-size: 12px; border-top: 1px solid var(--border); margin-top: 8px; padding-top: 6px; }
+.tile.IDLE .what, .tile.DEAD .what, .tile.DRAINING .what { font-weight: 400; color: var(--muted); }
+div.empty { padding: 28px 16px; text-align: center; color: var(--muted); }
+
+/* ---- raw data panel ---- */
+details > .pad { padding: 0 16px 16px; }
+.ok-note { color: var(--ok); font-size: 13px; }
+details .table-wrap table td, details .table-wrap table th { padding: 6px 12px; }
+
 /* ---- toasts ---- */
 #toasts { position: fixed; right: 20px; bottom: 20px; display: flex; flex-direction: column; gap: 8px; z-index: 10; }
 .toast { background: var(--text); color: var(--bg); padding: 9px 14px; border-radius: 6px; font-size: 13px; max-width: 320px; }

@@ -147,16 +147,19 @@ function jobsTable() {
 }
 
 /** Activity log. Each refresh() fetches only the lines it has not seen yet. */
-function activityLog({ jobId = null, showJob = true, tall = false } = {}) {
+function activityLog({ jobId = null, showJob = true, tall = false, accept = () => true } = {}) {
   const body = el("tbody");
-  const node = el("div", { className: `panel table-wrap scroll-log` }, el("table", { className: "log" }, body));
+  const emptyNote = el("div", { className: "empty", textContent: "No activity yet" });
+  const node = el("div", { className: `panel table-wrap scroll-log` }, el("table", { className: "log" }, body), emptyNote);
   if (tall) node.style.maxHeight = "70vh";
   let filter = jobId;
   let lastId = null;
 
   return {
     node,
-    setJob(id) { filter = id; lastId = null; body.replaceChildren(); },
+    setJob(id) { filter = id; lastId = null; body.replaceChildren(); emptyNote.hidden = false; },
+    /** Skip every line up to and including this event id (used to start the overview empty). */
+    startAfter(id) { if (lastId === null) lastId = id; },
     async refresh() {
       const params = new URLSearchParams();
       if (lastId !== null) params.set("after", lastId);
@@ -164,14 +167,16 @@ function activityLog({ jobId = null, showJob = true, tall = false } = {}) {
       const query = params.toString();
       const events = await api(query ? `/events?${query}` : "/events");
       for (const event of events) {
+        lastId = event.id;
+        if (!accept(event)) continue;
         body.prepend(el("tr", {},
           el("td", { className: "time num", textContent: new Date(event.created_at).toLocaleTimeString() }),
           showJob && el("td", { className: "job" },
             event.job_id ? el("a", { className: "mono", href: `#/jobs/${event.job_id}`, textContent: shortId(event.job_id) }) : ""),
           el("td", { className: "message", textContent: event.message })));
-        lastId = event.id;
       }
       while (body.rows.length > 300) body.deleteRow(-1);
+      emptyNote.hidden = body.rows.length > 0;
     },
   };
 }
@@ -180,13 +185,77 @@ function sectionTitle(text, linkText, href) {
   return el("div", { className: "section-title" }, text, linkText && el("a", { href, textContent: linkText }));
 }
 
+/** Natural order: workers-2 before workers-10. */
+const workerNumber = (worker) => Number(worker.id.match(/(\d+)$/)?.[1] ?? 0);
+const plural = (n, word) => `${formatNumber(n)} ${word}${Number(n) === 1 ? "" : "s"}`;
+
+/** What a busy worker is doing, as two short lines: [what, details]. */
+function describeTask(worker) {
+  const files = worker.task_files;
+  if (worker.task_type === "GENERATE") {
+    const range = worker.task_first_file === worker.task_last_file
+      ? `File ${worker.task_first_file}`
+      : `Files ${worker.task_first_file}–${worker.task_last_file}`;
+    return [`Generating ${plural(worker.task_size, "file")}`, range];
+  }
+  if (worker.task_is_final) return [`Final step: ${plural(worker.task_size, "item")}`, `Covers ${plural(files, "file")}, then divides`];
+  return [`Combining ${plural(worker.task_size, "item")}`, `Covers ${plural(files, "file")}`];
+}
+
+/** One tile per worker: its state and, when busy, which job and which files it is working on. */
+function workerTiles() {
+  const node = el("div", { className: "tiles" });
+  return {
+    node,
+    render(workers) {
+      // The grid adapts to the fleet: a few workers get big tiles that fill the row, many get compact ones.
+      node.dataset.size = workers.length <= 8 ? "roomy" : workers.length <= 16 ? "compact" : "dense";
+      if (!workers.length) return node.replaceChildren(el("div", { className: "panel empty", textContent: "No workers running" }));
+      node.replaceChildren(...[...workers].sort((a, b) => workerNumber(a) - workerNumber(b)).map((worker) => {
+        const busy = worker.status === "BUSY" && worker.current_task_id && worker.task_type;
+        const lines = busy ? describeTask(worker) : [{
+          IDLE: "Waiting for a task", DRAINING: "Finishing, then stopping", DEAD: "No heartbeat", BUSY: "Working",
+        }[worker.status] || sentenceCase(worker.status)];
+        return el("div", { className: `panel tile ${worker.status}` },
+          el("div", { className: "tile-head" }, el("span", { className: "mono name", textContent: worker.id }), status(worker.status)),
+          el("div", { className: "what", textContent: lines[0] }),
+          lines[1] && el("div", { className: "sub", textContent: lines[1] }),
+          busy && el("div", { className: "sub" },
+            "Job ", el("a", { className: "mono", href: `#/jobs/${worker.task_job_id}`, textContent: shortId(worker.task_job_id) }),
+            ` · ${formatDuration(Date.now() - new Date(worker.current_task_started_at))}`),
+          el("div", { className: "foot" }, `${plural(worker.tasks_done, "task")} done · speed ${worker.slowdown}×`));
+      }));
+    },
+  };
+}
+
 // ---- pages -----------------------------------------------------------------------------------
+
+/**
+ * The overview always starts empty. When the page loads, remember the newest job and log line that
+ * already exist; the overview then shows only what happens after that. The memory lasts until the page
+ * is reloaded or closed, so moving between pages keeps your running job, and a reload starts empty again.
+ * The Jobs and Activity pages still show the full history.
+ */
+let overviewBaseline = null;
+async function loadOverviewBaseline() {
+  if (overviewBaseline) return overviewBaseline;
+  const [jobs, events] = await Promise.all([api("/jobs"), api("/events")]);
+  overviewBaseline = {
+    jobCreatedAt: jobs.length ? jobs[0].created_at : null, // /jobs is newest first
+    eventId: events.length ? events[events.length - 1].id : 0,
+  };
+  return overviewBaseline;
+}
 
 function overviewPage() {
   const form = newJobForm();
   const stats = el("div", { className: "panel stats" });
+  const workers = workerTiles();
   const jobs = jobsTable();
-  const log = activityLog();
+  let visibleJobIds = new Set();
+  // Lines of jobs the overview hides (created before this tab opened) stay hidden too.
+  const log = activityLog({ accept: (event) => !event.job_id || visibleJobIds.has(event.job_id) });
 
   const stat = (label, value) =>
     el("div", { className: "stat" }, el("div", { className: "label", textContent: label }), el("div", { className: "value", textContent: value }));
@@ -197,17 +266,24 @@ function overviewPage() {
         pageHead("Overview", newJobButton(form)),
         form.node,
         stats,
+        sectionTitle("Workers", "Details", "#/workers"), workers.node,
         sectionTitle("Recent jobs", "View all", "#/jobs"), jobs.node,
         sectionTitle("Activity", "View all", "#/activity"), log.node);
     },
     async refresh() {
-      const [s, recent] = await Promise.all([api("/stats"), api("/jobs")]);
+      const baseline = await loadOverviewBaseline();
+      log.startAfter(baseline.eventId);
+      const [s, allJobs, workerList] = await Promise.all([api("/stats"), api("/jobs"), api("/workers")]);
+      const since = baseline.jobCreatedAt ? new Date(baseline.jobCreatedAt).getTime() : -Infinity;
+      const shown = allJobs.filter((job) => new Date(job.created_at).getTime() > since);
+      visibleJobIds = new Set(shown.map((job) => job.id));
       stats.replaceChildren(
-        stat("Jobs running", s.jobs.running + s.jobs.waiting),
+        stat("Jobs running", shown.filter(isActive).length),
         stat("Tasks queued", s.tasks.queued),
         stat("Workers busy", `${s.workers.busy} / ${s.workers.desired}`),
-        stat("Jobs completed", s.jobs.completed));
-      jobs.render(recent.slice(0, 6));
+        stat("Jobs completed", shown.filter((job) => job.status === "COMPLETED").length));
+      workers.render(workerList);
+      jobs.render(shown.slice(0, 6), "No jobs yet. Click New job to start one.");
       await log.refresh();
     },
   };
@@ -241,10 +317,72 @@ function jobsPage() {
   };
 }
 
+/**
+ * Raw data of one job. The workers store numbers as .npy (binary), which a text editor cannot open,
+ * so this shows the first values of a few raw files next to the mean recomputed from all raw files
+ * and the mean the system produced, and lets you download any raw file as CSV.
+ */
+function rawDataPanel(jobId) {
+  const body = el("div", { className: "pad" });
+  const node = el("details", { className: "panel", hidden: true, open: true, style: "margin-top:20px" },
+    el("summary", { textContent: "Raw data and check" }), body);
+  let loaded = null; // "partial" once files exist, "done" after the job completed
+
+  const fmt = (value) => (value === null ? "–" : value.toFixed(6));
+  const sameAsResult = (rows) => rows.every((row) => row.recomputed === null || row.result === null || Math.abs(row.recomputed - row.result) < 1e-9);
+
+  function downloadRow(fileCount) {
+    const input = el("input", { type: "number", min: 0, max: fileCount - 1, value: 0, "aria-label": "Raw file number" });
+    const link = el("a", { className: "button", textContent: "Download CSV", download: "" });
+    const update = () => { link.href = `/jobs/${jobId}/raw/${Number(input.value) || 0}`; };
+    input.addEventListener("input", update);
+    update();
+    return el("div", { className: "form-row", style: "margin-top:14px" },
+      el("div", {}, el("label", { textContent: `Raw file number (0 to ${fileCount - 1})` }), input), link);
+  }
+
+  function draw(job, preview) {
+    const head = el("tr", {}, ...["Position", ...preview.files.map((index) => `File ${index}`), "Mean of all files", "System result"]
+      .map((text) => el("th", { textContent: text })));
+    const rows = preview.rows.map((row) => el("tr", {},
+      el("td", { className: "num", textContent: row.position }),
+      ...row.values.map((value) => el("td", { className: "num", textContent: fmt(value) })),
+      el("td", { className: "num", textContent: fmt(row.recomputed) }),
+      el("td", { className: "num", textContent: fmt(row.result) })));
+    const checkable = preview.rows.some((row) => row.recomputed !== null && row.result !== null);
+    body.replaceChildren(
+      el("p", { className: "muted", style: "margin:0 0 10px", textContent:
+        `First ${preview.rows.length} positions of the first ${preview.files.length} raw files. ` +
+        "Each position is a row; the mean is taken across all files in that row." }),
+      el("div", { className: "table-wrap" }, el("table", {}, el("thead", {}, head), el("tbody", {}, ...rows))),
+      checkable && el("p", { className: sameAsResult(preview.rows) ? "ok-note" : "banner", style: "margin:10px 0 0", textContent:
+        sameAsResult(preview.rows) ? "The mean recomputed from all raw files matches the system result." : "The recomputed mean differs from the system result." }),
+      downloadRow(job.f));
+  }
+
+  return {
+    node,
+    async load(job) {
+      const state = job.status === "COMPLETED" ? "done" : "partial";
+      if (job.files_generated === 0 || loaded === state) return;
+      loaded = state;
+      node.hidden = false;
+      try {
+        draw(job, await api(`/jobs/${jobId}/raw-preview`));
+      } catch (error) {
+        loaded = null;
+        body.replaceChildren(el("p", { className: "muted", textContent: error.message }));
+      }
+    },
+  };
+}
+
 function jobPage(jobId) {
   const header = el("div");
   const body = el("div");
   const log = activityLog({ jobId, showJob: false });
+  const workers = workerTiles();
+  const raw = rawDataPanel(jobId);
   const preview = el("pre");
   const previewPanel = el("details", { className: "panel", hidden: true, style: "margin-top:20px" },
     el("summary", { textContent: "Result preview" }), preview);
@@ -307,12 +445,13 @@ function jobPage(jobId) {
 
   return {
     mount(root) {
-      root.append(header, body, previewPanel, sectionTitle("Activity"), log.node);
+      root.append(header, body, sectionTitle("Workers", "Details", "#/workers"), workers.node, previewPanel, raw.node, sectionTitle("Activity"), log.node);
     },
     async refresh() {
       let job;
       try {
         job = await api(`/jobs/${jobId}`);
+        workers.render(await api("/workers"));
       } catch {
         header.replaceChildren(el("a", { className: "back", href: "#/jobs", textContent: "← Jobs" }), pageHead("Job not found"));
         body.replaceChildren();
@@ -321,6 +460,7 @@ function jobPage(jobId) {
       drawHeader(job);
       drawBody(job);
       if (job.status === "COMPLETED" && !previewLoaded) await loadPreview();
+      await raw.load(job);
       await log.refresh();
     },
   };

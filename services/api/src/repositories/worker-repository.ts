@@ -2,13 +2,24 @@ import { config } from "../config";
 import { pool, Queryable } from "../infrastructure/database";
 import { heartbeatIsFresh } from "../infrastructure/sql-fragments";
 
-/** All workers. A worker with a stale heartbeat is reported as DEAD whatever its stored status is. */
+/**
+ * All workers, with what each one is working on right now. A worker with a stale heartbeat is
+ * reported as DEAD whatever its stored status is.
+ * task_size = files (GENERATE) or inputs (COMBINE); task_files = files the task covers.
+ */
 export async function listWorkers() {
   const { rows } = await pool.query(
-    `SELECT id,
-            CASE WHEN ${heartbeatIsFresh()} THEN status ELSE 'DEAD' END AS status,
-            slowdown, tasks_done, current_task_id, current_task_started_at, last_seen, started_at
-     FROM workers ORDER BY id`,
+    `SELECT w.id,
+            CASE WHEN ${heartbeatIsFresh("w.last_seen")} THEN w.status ELSE 'DEAD' END AS status,
+            w.slowdown, w.tasks_done, w.current_task_id, w.current_task_started_at, w.last_seen, w.started_at,
+            t.job_id AS task_job_id, t.type AS task_type, t.is_final AS task_is_final,
+            COALESCE(jsonb_array_length(t.payload->'fileIndexes'), jsonb_array_length(t.payload->'inputs')) AS task_size,
+            (t.payload->'fileIndexes'->>0)::int AS task_first_file,
+            (t.payload->'fileIndexes'->>-1)::int AS task_last_file,
+            CASE WHEN t.type = 'GENERATE' THEN jsonb_array_length(t.payload->'fileIndexes')
+                 ELSE (SELECT sum((i->>'count')::int) FROM jsonb_array_elements(t.payload->'inputs') i)::int END AS task_files
+     FROM workers w LEFT JOIN tasks t ON t.id = w.current_task_id
+     ORDER BY w.id`,
     [config.workerHeartbeatTimeoutMs],
   );
   return rows;

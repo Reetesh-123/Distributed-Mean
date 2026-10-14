@@ -2,6 +2,22 @@
 
 Questions you may be asked about this assignment, with short answers. Lines starting with "Follow-up" are the questions an interviewer is likely to ask next. Numbers come from the design document and the tests.
 
+**Jump to:**
+- [30-second pitch](#30-second-pitch)
+- [1. The problem and the approach](#1-the-problem-and-the-approach)
+- [2. Data model](#2-data-model)
+- [3. The scheduler and the planner](#3-the-scheduler-and-the-planner)
+- [4. Workers and the 5-file limit](#4-workers-and-the-5-file-limit)
+- [5. Failures and reliability](#5-failures-and-reliability)
+- [6. Multiple jobs and fairness](#6-multiple-jobs-and-fairness)
+- [7. Technology choices](#7-technology-choices)
+- [8. Performance and scale](#8-performance-and-scale)
+- [9. Testing](#9-testing)
+- [10. UI and API (bonus)](#10-ui-and-api-bonus)
+- [11. Honest limitations](#11-honest-limitations)
+- [12. "What if" questions](#12-what-if-questions)
+- [Numbers to remember](#numbers-to-remember)
+
 ## 30-second pitch
 
 > The user sends F and C. The API splits the job into small tasks and puts them on a queue. A pool of workers takes one task at a time. Each worker returns **sums and a count**, never averages. A scheduler combines those partial results, 5 at a time, as soon as they are ready. The last task divides once. A count check (count = F) tells us the job is really done.
@@ -33,7 +49,8 @@ Questions you may be asked about this assignment, with short answers. Lines star
 > - A combine just adds two position-by-position lists, so no regrouping is needed.
 
 **Q: How many tasks does a job create?**
-- ⌈F / 5⌉ generate tasks, plus at least (F − 1) / 4 combine tasks.
+- F / 5 (rounded up) generate tasks, plus about (F − 1) / 4 combine tasks.
+- Why (F − 1) / 4: a combine takes up to 5 items and gives back 1, so it removes 4. F items must shrink to 1.
 - At F = 99,999 that is about 20,000 + 25,000 = 45,000 tasks.
 
 **Q: Why do workers generate the files, not the API?**
@@ -64,7 +81,7 @@ Questions you may be asked about this assignment, with short answers. Lines star
 **Q: Why store numbers in files and not in the database or the queue?**
 - Queue messages stay tiny: paths and counts only.
 - A file of 999,999 values is about 4 MB. Putting that in a row or a message would slow everything down.
-- `.npy` is about 4× smaller than CSV and faster to read.
+- `.npy` is much smaller than CSV and faster to read.
 
 **Q: Why float32 on disk but float64 for the sums?**
 - float32 halves the file size.
@@ -130,7 +147,7 @@ Questions you may be asked about this assignment, with short answers. Lines star
 > - Code that locks several rows always takes the task first, then the job. Same order everywhere, so no cycle.
 
 **Q: How do you know a job is finished?**
-- The final task is created only when all files exist, nothing else is running, and what is left fits in one task.
+- The final task is created only when all files exist, nothing else is running, and fewer than 5 items are left.
 - The result must have count = F. Then the job is `COMPLETED`.
 - If not, it is `FAILED` with a message. A missed or doubled file never turns into a wrong mean.
 
@@ -177,7 +194,7 @@ Questions you may be asked about this assignment, with short answers. Lines star
 **Q: What if one worker is very slow?**
 - A **backup copy**: if a worker is idle, the queue is empty and a task has run longer than 2× the median (and at least 1 s), I publish one duplicate.
 - The first result wins. The other is ignored.
-- I tested it with a worker 30× slower: one backup was sent and the result was exact.
+- I tested it with one worker 20× slower (F = 40, C = 999,999). The job took 4.6 to 6.8 s without backup copies and 3.6 to 4.2 s with them, and the result was exact.
 
 > **Follow-up: What if both copies finish?**
 > - The first result is applied. The second finds the task `DONE` and is ignored.
@@ -274,7 +291,7 @@ Questions you may be asked about this assignment, with short answers. Lines star
 
 **Q: What if RabbitMQ restarts?**
 - Queues and messages are durable. The scheduler reconnects and picks the consumer back up.
-- I tested a restart in the middle of a 500-file job: it finished correctly.
+- I restarted it in the middle of a 2,000-file job. The scheduler reconnected and the job finished with an exact result.
 
 **Q: What if a bad message appears on the results queue?**
 - It is checked, logged and dropped. Retrying a bad message would fail the same way forever.
@@ -347,7 +364,7 @@ Questions you may be asked about this assignment, with short answers. Lines star
 
 **Q: Can it handle F = 99,999 and C = 999,999?**
 - By design, yes. I never ran that size: the raw data would be about 400 GB.
-- I tested up to F = 4,000 with C = 300,000.
+- The largest runs were F = 4,000 with C = 300,000, and C = 999,999 with F = 40.
 
 **Q: What would break first at maximum size?**
 1. The planner reads all of a job's waiting items on each pass.
@@ -358,18 +375,17 @@ Questions you may be asked about this assignment, with short answers. Lines star
 > - Read only a few waiting items per pass (`LIMIT 5`), or keep a count so a job with fewer than 2 waiting is skipped.
 
 **Q: How would you scale it further?**
-- Plan only a few items at a time, or keep a count so a job with fewer than 2 waiting items is skipped.
 - Add leader election or an advisory lock for a standby scheduler.
 - Move file storage to S3 or a similar object store.
 
 **Q: How good is your scheduling compared to the best possible?**
-- A simulation (`bench/simulate.py`) compared four strategies:
-
-| Strategy | Time compared with the best possible |
-|---|---|
-| Static split | 1.7 to 3.0× |
-| Fixed rounds | 1.01 to 2.06× |
-| Waiting items with backups (mine) | 1.00 to 2.06× |
+- A simulation (`tools/simulate.py`) with 8 workers of different speeds compared four strategies.
+- Each number is how many times longer the job took than the best possible time. Lower is better, and 1.00× is perfect.
+- **Split the files evenly at the start:** 1.70× to 2.98×.
+- **Combine in fixed rounds:** 1.01× to 2.06×.
+- **Combine as soon as items are ready:** 1.01× to 3.43×.
+- **Same, plus backup copies (mine):** 1.00× to 2.06×. It is within 2% of perfect from F = 1,000 up.
+- Small jobs (F = 20) are poor for every strategy, because 20 files make too few tasks to keep 8 workers busy.
 
 **Q: How deep is the combining tree?**
 - About 7 to 8 levels at F = 99,999, since each combine takes 5 inputs. It is eager, so levels overlap.
@@ -379,22 +395,23 @@ Questions you may be asked about this assignment, with short answers. Lines star
 ## 9. Testing
 
 **Q: How did you test it?**
-- 11 unit tests of the maths, including the 5-input limit.
+- 11 unit tests of the maths.
 - 35 integration checks on a real PostgreSQL: every planner rule, result handling, validation and publish order.
-- End-to-end runs: exact match with `numpy.mean` (difference 0), worker `kill -9`, two jobs at once, cancel, scaling, a slow worker, a RabbitMQ restart.
+- 920 random jobs through a model of the planner rules (`tools/planner_check.py`).
+- End-to-end runs: exact match with `numpy.mean` (difference 0), worker `kill -9`, several jobs at once, cancel, scaling, a slow worker, a RabbitMQ restart and a scheduler restart.
 - 21 click-through checks of the UI in a simulated browser.
 
 > **Follow-up: How did you test crash recovery?**
-> - I ran `kill -9` on a worker during a job (`scripts/kill-worker.sh`). The task was redelivered and the result matched numpy exactly.
+> - I ran `kill -9` on a worker during a job (`tools/kill-worker.sh`). The task was redelivered and the result matched numpy exactly.
 > - I also restarted RabbitMQ in the middle of a job. It finished correctly.
 
 **Q: How do you verify a result is correct?**
-- `python -m distributed_mean.verify <jobId>` recomputes the mean from the raw files and compares.
-- `scripts/show_job.py` prints the raw values next to the mean, so you can check by eye.
+- `python tools/verify.py <jobId>` recomputes the mean from the raw files and compares.
+- `tools/show_job.py` prints the raw values next to the mean, so you can check by eye.
 
 **Q: What did you not test?**
 - F = 99,999 with C = 999,999.
-- The UI in a real browser (only a simulated one and screenshots).
+- The UI buttons in a real browser. Pages were checked in headless Edge and a simulated browser (jsdom), and the API calls behind each button were tested directly.
 
 ---
 
@@ -428,7 +445,8 @@ Questions you may be asked about this assignment, with short answers. Lines star
 - `backup_sent` isn't reset when a task is retried.
 - The API and the scheduler can both publish and briefly overfill the queue.
 - A frozen worker (not crashed) keeps its task until the broker heartbeat times out.
-- None of them gives a wrong result. They affect efficiency or recovery time.
+- A request body that is not valid JSON returns `500` instead of `400`.
+- None of them gives a wrong result. They affect efficiency, recovery time or an error code.
 
 **Q: What would you do differently with more time?**
 - Incremental planning for huge jobs.
@@ -468,16 +486,14 @@ Questions you may be asked about this assignment, with short answers. Lines star
 
 ## Numbers to remember
 
-| Item | Value |
-|---|---|
-| Limits | 1 < F < 100,000 and 1 < C < 1,000,000 |
-| Inputs per task | at most 5 |
-| Tasks at F = 99,999 | about 20,000 generate + 25,000 combine |
-| Queue depth | about 2 × W |
-| Scheduler tick | 500 ms |
-| Heartbeat / dead after | 2 s / 10 s |
-| Attempts per task | 3 |
-| Backup copy | running longer than 2× the median, and at least 1 s |
-| Memory cap | 512 MB per worker |
-| Raw data at maximum size | about 400 GB |
-| Tests | 11 unit + 35 integration |
+- **Limits:** 1 < F < 100,000 and 1 < C < 1,000,000
+- **Inputs per task:** at most 5
+- **Tasks at F = 99,999:** about 20,000 generate + 25,000 combine
+- **Queue depth:** about 2 × W
+- **Scheduler tick:** 500 ms
+- **Heartbeat / dead after:** 2 s / 10 s
+- **Attempts per task:** 3
+- **Backup copy:** running longer than 2× the median, and at least 1 s
+- **Memory cap:** 512 MB per worker
+- **Raw data at maximum size:** about 400 GB
+- **Tests:** 11 unit + 35 integration

@@ -60,7 +60,7 @@ def generate_files(data_dir, job_id, numbers_per_file, file_indexes):
 
 - It makes `numbers_per_file` (C) random numbers in [0, 1) per file. The `.random(c)` array **is** the file: position 0 is index 0, position 1 is index 1, and so on.
 - `count: 1` marks it as one file. Because a raw file looks exactly like a partial result (a list of numbers plus a count), one kind of combine task handles both.
-- The seed comes from the job id and file index, so the same job always generates the same numbers. That makes results reproducible and lets `verify.py` (run as `python -m distributed_mean.verify`) recompute the truth later.
+- The seed comes from the job id and file index, so the same job always generates the same numbers. That makes results reproducible and lets `verify.py` (run as `python tools/verify.py`) recompute the truth later.
 
 ```python
 def file_seed(job_id, file_index):

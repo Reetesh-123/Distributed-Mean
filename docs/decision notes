@@ -215,7 +215,7 @@ Each decision records the problem, the options considered, what was chosen, why,
 
 **Why.** The technique MapReduce uses for stragglers. It reuses the duplicate handling from D12.
 
-**Simulation** (`bench/simulate.py`, 8 workers: 4 at 1×, 2 at 2× slower, 2 at 3× slower; ratio to theoretical best, lower is better):
+**Simulation** (`tools/simulate.py`, 8 workers: 4 at 1×, 2 at 2× slower, 2 at 3× slower; ratio to theoretical best, lower is better):
 
 | Files | Static split | Fixed rounds | Basket only | Basket + backups |
 |---|---|---|---|---|

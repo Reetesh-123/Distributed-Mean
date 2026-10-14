@@ -71,8 +71,10 @@ services:
       INITIAL_WORKERS: "${INITIAL_WORKERS:-3}"
       WORKER_SLOWDOWN: "${WORKER_SLOWDOWN:-1,1,3}"   # demo: 3rd worker is 3x slower (cycled by worker index)
       WORKER_MEMORY_MB: "512"             # simulated RAM cap per worker process (0 = off)
+      PYTHONPATH: /app                    # lets tools/verify.py import the worker package
     volumes:
       - ./data:/data
+      - ./tools:/app/tools:ro             # helper scripts, e.g. tools/verify.py
     depends_on:
       postgres: { condition: service_healthy }
       rabbitmq: { condition: service_healthy }

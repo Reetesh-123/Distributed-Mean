@@ -2,23 +2,22 @@
 
 Short step lists for every flow in the system. Names in `code` are the real functions and tables.
 
-| # | Flow | Runs in |
-|---|---|---|
-| 1 | Create a job | API |
-| 2 | Publish tasks to the queue | API and scheduler |
-| 3 | Worker runs a GENERATE task | Worker |
-| 4 | Apply a result | Scheduler |
-| 5 | Combine | Planner and worker |
-| 6 | Final task and completion | Planner, worker, scheduler |
-| 7 | Retry after a failure | Worker and scheduler |
-| 8 | Duplicate and late results | Scheduler |
-| 9 | Cancel | API |
-| 10 | Backup copy for a slow task | Scheduler |
-| 11 | Dead worker | Scheduler and broker |
-| 12 | Change the number of workers | API and worker manager |
-| 13 | The 500 ms tick | Scheduler |
-| 14 | Start-up and reconnect | All |
-| 15 | Progress and the UI | API and browser |
+**Jump to** (the part of the system that runs it is in brackets):
+1. [Create a job](#1-create-a-job) (API)
+2. [Publish tasks to the queue](#2-publish-tasks-to-the-queue-the-dispatcher) (API and scheduler)
+3. [Worker runs a GENERATE task](#3-worker-runs-a-generate-task) (worker)
+4. [Apply a result](#4-apply-a-result-scheduler) (scheduler)
+5. [Combine](#5-combine) (planner and worker)
+6. [Final task and completion](#6-final-task-and-completion) (planner, worker, scheduler)
+7. [Retry after a failure](#7-retry-after-a-failure) (worker and scheduler)
+8. [Duplicate and late results](#8-duplicate-and-late-results) (scheduler)
+9. [Cancel](#9-cancel) (API)
+10. [Backup copy for a slow task](#10-backup-copy-for-a-slow-task) (scheduler)
+11. [Dead worker](#11-dead-worker) (scheduler and broker)
+12. [Change the number of workers](#12-change-the-number-of-workers) (API and worker manager)
+13. [The 500 ms tick](#13-the-500-ms-tick) (scheduler)
+14. [Start-up and reconnect](#14-start-up-and-reconnect) (all)
+15. [Progress and the UI](#15-progress-and-the-ui) (API and browser)
 
 ---
 
@@ -108,7 +107,7 @@ Short step lists for every flow in the system. Names in `code` are the real func
 
 ## 6. Final task and completion
 
-- The planner creates the final task when all files exist, nothing else is running, and what is left fits in one task.
+- The planner creates the final task when all files exist, nothing else is running, and fewer than 5 items are left.
 - The worker does the same addition, then **divides every position by the total count**.
 - It writes `result.npy` and `result.csv` (one value per line) and reports the count.
 - The scheduler checks the count:

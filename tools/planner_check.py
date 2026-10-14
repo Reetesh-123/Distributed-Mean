@@ -1,6 +1,6 @@
 # Randomized check of the basket rules in 04-implementation-notes.md section 8.2:
 # random speeds and completion order; asserts correct mean, final count == F, <= 5 inputs, no deadlock.
-# Run: python bench/planner_check.py
+# Run: python tools/planner_check.py
 import random, heapq
 import numpy as np
 

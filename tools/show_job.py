@@ -1,6 +1,6 @@
 """Print a job's raw input values next to the computed mean, so the result can be checked by eye.
 
-Usage: python scripts/show_job.py <jobId> [positions=10] [dataDir=data]
+Usage: python tools/show_job.py <jobId> [positions=10] [dataDir=data]
 Rows are positions (0, 1, 2, ...), columns are the raw files, the last two columns are the mean
 recomputed here and the mean the system produced (result.npy). Needs only numpy, no database.
 """

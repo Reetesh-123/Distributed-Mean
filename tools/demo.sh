@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Create a job, wait for it to finish, and verify the result against numpy.
-# Usage: scripts/demo.sh [F] [C]      (defaults: F=50, C=10000)
+# Usage: tools/demo.sh [F] [C]      (defaults: F=50, C=10000)
 # Needs the stack running (docker compose up -d --build) and curl.
 set -euo pipefail
 
@@ -40,5 +40,5 @@ curl -sS -o "$out" "$API/jobs/$job_id/result"
 echo "Downloaded $out ($(wc -l < "$out" | tr -d ' ') values)"
 
 echo "Verifying against numpy (inside the worker image)..."
-docker compose exec -T workers python -m distributed_mean.verify "$job_id"
+docker compose exec -T workers python tools/verify.py "$job_id"
 echo "Done in $(( $(date +%s) - start ))s. Dashboard: $API"

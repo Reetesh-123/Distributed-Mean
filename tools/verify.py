@@ -1,6 +1,7 @@
 """Check a finished job against numpy.
 
-Usage: python -m distributed_mean.verify <jobId>
+Usage (inside the worker container, which mounts ./tools):
+    docker compose exec workers python tools/verify.py <jobId>
 Recomputes the mean directly from the raw files and compares it with result.npy.
 Exits non-zero if the largest absolute difference is above TOLERANCE.
 """
@@ -9,7 +10,7 @@ import sys
 
 import numpy as np
 
-from . import config, repository
+from distributed_mean import config, repository
 
 TOLERANCE = 1e-9
 

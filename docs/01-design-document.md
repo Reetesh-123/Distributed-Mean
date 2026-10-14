@@ -212,7 +212,7 @@ The Python package `distributed_mean` is split the same way: `computation.py` (t
 - **Changing W:** scaled from 6 to 2 workers during jobs. No task failed and none was retried.
 - **RabbitMQ restart:** restarted it in the middle of a job. The job still finished correctly.
 
-**Scheduling simulation** (`bench/simulate.py`). Before building, I compared four ways of scheduling in a small simulation. It has 8 workers: 4 normal, 2 that take twice as long and 2 that take three times as long. The score is the total time divided by the best possible time, so 1.00 means no worker was ever idle.
+**Scheduling simulation** (`tools/simulate.py`). Before building, I compared four ways of scheduling in a small simulation. It has 8 workers: 4 normal, 2 that take twice as long and 2 that take three times as long. The score is the total time divided by the best possible time, so 1.00 means no worker was ever idle.
 
 | Strategy | F = 20 | F = 100 | F = 1,000 | F = 10,000 |
 |---|---|---|---|---|
@@ -226,7 +226,7 @@ The Python package `distributed_mean` is split the same way: `computation.py` (t
 - Backup copies matter most for small jobs: at F = 20 they take it from 3.43× down to 2.06×.
 - Small jobs are far from perfect for every strategy, because 20 files give too few tasks to keep 8 workers busy.
 
-**Tools.** `python -m distributed_mean.verify <jobId>` recomputes the mean from the raw files and compares it with the result. `scripts/show_job.py` prints the raw values next to the mean. `scripts/demo.sh` and `scripts/kill-worker.sh` run a demo and a worker crash.
+**Tools.** `python tools/verify.py <jobId>` recomputes the mean from the raw files and compares it with the result. `tools/show_job.py` prints the raw values next to the mean. `tools/demo.sh` and `tools/kill-worker.sh` run a demo and a worker crash.
 
 **Not tested.** F = 99,999 together with C = 999,999. The UI was only checked with a simulated browser (jsdom) and screenshots, not clicked in a real browser.
 

@@ -2,7 +2,7 @@
 
 **Audience:** the engineer (or Claude) implementing the system.
 **Read first:** `01-design-document.md` (what and why), `03-decision-notes.md` (reasoning). This file says exactly **how** to build it.
-**Companion files:** `schema.sql` (database), `docker-compose.yml` (local run), `bench/simulate.py` (scheduling benchmark), `bench/planner_check.py` (reference model of the basket rules, randomized test), `02-requirements-checklist.md` (tick off as you build).
+**Companion files:** `schema.sql` (database), `docker-compose.yml` (local run), `tools/simulate.py` (scheduling benchmark), `tools/planner_check.py` (reference model of the basket rules, randomized test), `02-requirements-checklist.md` (tick off as you build).
 
 ---
 
@@ -82,12 +82,11 @@ These are the core of the design. Do not change them without flagging it.
 │   ├── worker.py                # one worker process: consume, compute, report
 │   ├── compute.py               # generate_files(), combine() — pure functions, unit tested
 │   ├── storage.py               # paths, atomic save/load
-│   ├── verify.py                # recompute a job's mean with numpy and compare (runs inside the image)
 │   └── tests/
 │       └── test_compute.py
-├── scripts/
-│   └── demo.sh                  # create a job, wait, verify (uses curl + docker compose exec)
-└── bench/
+└── tools/                       # helper scripts, not part of the running system
+    ├── demo.sh                  # create a job, wait, verify (uses curl + docker compose exec)
+    ├── verify.py                # recompute a job's mean with numpy and compare (runs inside the worker container)
     └── simulate.py
 ```
 
@@ -457,7 +456,7 @@ Works on a narrow screen (tables scroll horizontally).
 | M1 | Compose, Dockerfiles, schema, empty API | `docker compose up` starts all services; `GET /stats` returns zeros |
 | M2 | `compute.py` + unit tests | `combine([1,2,3],[4,5,6])` → `[2.5, 3.5, 4.5]`; random arrays match `np.mean` (1e-12); fan-in > 5 raises |
 | M3 | `POST /jobs` + `refill()` + worker GENERATE path | Creating a job produces F files in `data/{jobId}/raw/` |
-| M4 | Scheduler: `handleResult`, `planJob`, final task | Jobs reach `COMPLETED`; `scripts/verify.py` passes for F = 2, 6, 37, 1000 |
+| M4 | Scheduler: `handleResult`, `planJob`, final task | Jobs reach `COMPLETED`; `tools/verify.py` passes for F = 2, 6, 37, 1000 |
 | M5 | Retries, duplicates, dead workers, cancel | Killing a worker mid-job still gives a correct result; cancelling a job leaves no task stuck in `QUEUED` |
 | M6 | Round-robin fairness, rule 3, backups | Small job submitted after a big one finishes first; with `WORKER_SLOWDOWN=1,1,3` fast workers complete more tasks |
 | M7 | `PUT /workers`, manager, dashboard | Changing W mid-job works without interrupting tasks; dashboard shows all counters live |
@@ -468,8 +467,8 @@ Works on a narrow screen (tables scroll horizontally).
 ## 14. Testing and scripts
 
 - **`worker/tests/test_compute.py`** (pytest): assignment example; mixed raw + partial inputs; counts add correctly; shape mismatch raises; > 5 inputs raises.
-- **`worker/verify.py <jobId>`** (run with `docker compose exec workers python verify.py <jobId>`): loads every raw file of the job, computes `np.mean(axis=0)` in float64, compares with `result.npy`; prints max absolute difference; exits non-zero if > 1e-9. It lives in the worker image because NumPy is installed there.
-- **`scripts/demo.sh`**: `POST /jobs {F:50, C:10000}` → poll `GET /jobs/:id` until `COMPLETED` → `docker compose exec workers python verify.py <jobId>` → print summary.
+- **`tools/verify.py <jobId>`** (run with `docker compose exec workers python tools/verify.py <jobId>`): loads every raw file of the job, computes `np.mean(axis=0)` in float64, compares with `result.npy`; prints max absolute difference; exits non-zero if > 1e-9. It lives in the worker image because NumPy is installed there.
+- **`tools/demo.sh`**: `POST /jobs {F:50, C:10000}` → poll `GET /jobs/:id` until `COMPLETED` → `docker compose exec workers python tools/verify.py <jobId>` → print summary.
 - **Manual tests** to record for the submission: slow-worker demo, crash test (`docker compose exec workers pkill -9 -f worker.py` kills one worker; the manager restarts it), fairness test, scaling test.
 
 ---
@@ -481,7 +480,7 @@ Works on a narrow screen (tables scroll horizontally).
 3. `docker compose up --build`
 4. URLs: dashboard `http://localhost:3000`, RabbitMQ `http://localhost:15672` (guest/guest)
 5. Example: `curl -X POST localhost:3000/jobs -H 'Content-Type: application/json' -d '{"F":50,"C":10000}'`
-6. How to download a result and verify it (`docker compose exec workers python verify.py <jobId>`)
+6. How to download a result and verify it (`docker compose exec workers python tools/verify.py <jobId>`)
 7. How to change W and the slowdown demo
 8. Note on limits: the design supports F < 100,000 and C < 1,000,000, but a laptop's disk and memory limit demo sizes (use F ≤ 2,000, C ≤ 100,000)
 
