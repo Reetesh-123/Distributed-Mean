@@ -147,7 +147,7 @@ function jobsTable() {
 }
 
 /** Activity log. Each refresh() fetches only the lines it has not seen yet. */
-function activityLog({ jobId = null, showJob = true, tall = false, accept = () => true } = {}) {
+function activityLog({ jobId = null, showJob = true, tall = false } = {}) {
   const body = el("tbody");
   const emptyNote = el("div", { className: "empty", textContent: "No activity yet" });
   const node = el("div", { className: `panel table-wrap scroll-log` }, el("table", { className: "log" }, body), emptyNote);
@@ -158,8 +158,6 @@ function activityLog({ jobId = null, showJob = true, tall = false, accept = () =
   return {
     node,
     setJob(id) { filter = id; lastId = null; body.replaceChildren(); emptyNote.hidden = false; },
-    /** Skip every line up to and including this event id (used to start the overview empty). */
-    startAfter(id) { if (lastId === null) lastId = id; },
     async refresh() {
       const params = new URLSearchParams();
       if (lastId !== null) params.set("after", lastId);
@@ -167,13 +165,12 @@ function activityLog({ jobId = null, showJob = true, tall = false, accept = () =
       const query = params.toString();
       const events = await api(query ? `/events?${query}` : "/events");
       for (const event of events) {
-        lastId = event.id;
-        if (!accept(event)) continue;
         body.prepend(el("tr", {},
           el("td", { className: "time num", textContent: new Date(event.created_at).toLocaleTimeString() }),
           showJob && el("td", { className: "job" },
             event.job_id ? el("a", { className: "mono", href: `#/jobs/${event.job_id}`, textContent: shortId(event.job_id) }) : ""),
           el("td", { className: "message", textContent: event.message })));
+        lastId = event.id;
       }
       while (body.rows.length > 300) body.deleteRow(-1);
       emptyNote.hidden = body.rows.length > 0;
@@ -231,31 +228,12 @@ function workerTiles() {
 
 // ---- pages -----------------------------------------------------------------------------------
 
-/**
- * The overview always starts empty. When the page loads, remember the newest job and log line that
- * already exist; the overview then shows only what happens after that. The memory lasts until the page
- * is reloaded or closed, so moving between pages keeps your running job, and a reload starts empty again.
- * The Jobs and Activity pages still show the full history.
- */
-let overviewBaseline = null;
-async function loadOverviewBaseline() {
-  if (overviewBaseline) return overviewBaseline;
-  const [jobs, events] = await Promise.all([api("/jobs"), api("/events")]);
-  overviewBaseline = {
-    jobCreatedAt: jobs.length ? jobs[0].created_at : null, // /jobs is newest first
-    eventId: events.length ? events[events.length - 1].id : 0,
-  };
-  return overviewBaseline;
-}
-
 function overviewPage() {
   const form = newJobForm();
   const stats = el("div", { className: "panel stats" });
   const workers = workerTiles();
   const jobs = jobsTable();
-  let visibleJobIds = new Set();
-  // Lines of jobs the overview hides (created before this tab opened) stay hidden too.
-  const log = activityLog({ accept: (event) => !event.job_id || visibleJobIds.has(event.job_id) });
+  const log = activityLog();
 
   const stat = (label, value) =>
     el("div", { className: "stat" }, el("div", { className: "label", textContent: label }), el("div", { className: "value", textContent: value }));
@@ -271,19 +249,14 @@ function overviewPage() {
         sectionTitle("Activity", "View all", "#/activity"), log.node);
     },
     async refresh() {
-      const baseline = await loadOverviewBaseline();
-      log.startAfter(baseline.eventId);
-      const [s, allJobs, workerList] = await Promise.all([api("/stats"), api("/jobs"), api("/workers")]);
-      const since = baseline.jobCreatedAt ? new Date(baseline.jobCreatedAt).getTime() : -Infinity;
-      const shown = allJobs.filter((job) => new Date(job.created_at).getTime() > since);
-      visibleJobIds = new Set(shown.map((job) => job.id));
+      const [s, recent, workerList] = await Promise.all([api("/stats"), api("/jobs"), api("/workers")]);
       stats.replaceChildren(
-        stat("Jobs running", shown.filter(isActive).length),
+        stat("Jobs running", s.jobs.running + s.jobs.waiting),
         stat("Tasks queued", s.tasks.queued),
         stat("Workers busy", `${s.workers.busy} / ${s.workers.desired}`),
-        stat("Jobs completed", shown.filter((job) => job.status === "COMPLETED").length));
+        stat("Jobs completed", s.jobs.completed));
       workers.render(workerList);
-      jobs.render(shown.slice(0, 6), "No jobs yet. Click New job to start one.");
+      jobs.render(recent.slice(0, 6), "No jobs yet. Click New job to start one.");
       await log.refresh();
     },
   };
